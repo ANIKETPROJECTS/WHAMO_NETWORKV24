@@ -1,4 +1,4 @@
-import { WhamoNode, WhamoEdge, PcharType } from './store';
+import { WhamoNode, WhamoEdge, PcharType, TcharType } from './store';
 
 interface ParsedTopology {
   elemLinks: Map<string, { from: string; to: string; type: 'link' }>;
@@ -15,9 +15,13 @@ interface ParsedElements {
     variable?: boolean; distance?: number; area?: number; d?: number; a?: number;
   }>;
   pumps: Map<string, { pumpType: number; rq: number; rhead: number; rspeed: number; rtorque: number; wr2: number }>;
+  turbines: Map<string, { turbineType: number; syncSpeed: number; wr2: number; turbFriction: number; windage: number }>;
   oneway: Map<string, { diam: number }>;
   oppumps: Set<string>;
+  opturbs: Map<string, { mode: string; vScheduleNumber?: number }>;
   pchar: Map<number, PcharType>;
+  tchar: Map<number, TcharType>;
+  vSchedules: Map<number, { t: number; g: number }[]>;
 }
 
 function joinContinuationLines(lines: string[]): string[] {
@@ -95,9 +99,13 @@ function parseElementProperties(lines: string[]): ParsedElements {
   const reservoirs = new Map<string, { elevation: number; mode: string; hScheduleNumber?: number }>();
   const conduits = new Map<string, any>();
   const pumps = new Map<string, any>();
+  const turbines = new Map<string, any>();
   const oneway = new Map<string, { diam: number }>();
   const oppumps = new Set<string>();
+  const opturbs = new Map<string, { mode: string; vScheduleNumber?: number }>();
   const pchar = new Map<number, PcharType>();
+  const tchar = new Map<number, TcharType>();
+  const vSchedules = new Map<number, { t: number; g: number }[]>();
 
   const joined = joinContinuationLines(lines);
 
@@ -108,6 +116,28 @@ function parseElementProperties(lines: string[]): ParsedElements {
     sratio: [], qratio: [], hratio: [], tratio: []
   };
   let hratioRow: number[] = [];
+
+  let inTchar = false;
+  let tcharType = 0;
+  let tcharSection: 'none' | 'gate' | 'head' | 'qmatrix' | 'efficiency' = 'none';
+  let tcharBuf: { gate: number[]; head: number[]; qMatrix: number[][]; effMatrix: number[][] } = {
+    gate: [], head: [], qMatrix: [], effMatrix: []
+  };
+
+  const flushTchar = () => {
+    if (tcharType > 0 && tcharBuf.gate.length > 0) {
+      tchar.set(tcharType, {
+        gate: [...tcharBuf.gate],
+        head: [...tcharBuf.head],
+        qMatrix: tcharBuf.qMatrix.map(r => [...r]),
+        effMatrix: tcharBuf.effMatrix.map(r => [...r]),
+      });
+    }
+    tcharBuf = { gate: [], head: [], qMatrix: [], effMatrix: [] };
+    tcharSection = 'none';
+    inTchar = false;
+    tcharType = 0;
+  };
 
   const flushPchar = () => {
     if (hratioRow.length > 0) {
@@ -135,6 +165,33 @@ function parseElementProperties(lines: string[]): ParsedElements {
     if (!trimmed) continue;
 
     const upper = trimmed.toUpperCase();
+
+    if (inTchar) {
+      if (/^FINISH\b/i.test(upper)) {
+        flushTchar();
+        continue;
+      }
+      if (/^TCHAR\s+TYPE\s+(\d+)/i.test(upper)) {
+        flushTchar();
+        inTchar = true;
+        const m2 = trimmed.match(/^TCHAR\s+TYPE\s+(\d+)/i);
+        tcharType = parseInt(m2![1]);
+        tcharSection = 'none';
+        continue;
+      }
+      if (/^GATE\b/i.test(upper)) { tcharSection = 'gate'; continue; }
+      if (/^HEAD\b/i.test(upper)) { tcharSection = 'head'; continue; }
+      if (/^QMATRIX\b/i.test(upper)) { tcharSection = 'qmatrix'; continue; }
+      if (/^EFFICIENCY\b/i.test(upper)) { tcharSection = 'efficiency'; continue; }
+      const numsT = trimmed.split(/\s+/).map(parseFloat).filter(n => !isNaN(n));
+      if (numsT.length > 0) {
+        if (tcharSection === 'gate') tcharBuf.gate.push(...numsT);
+        else if (tcharSection === 'head') tcharBuf.head.push(...numsT);
+        else if (tcharSection === 'qmatrix') tcharBuf.qMatrix.push(numsT);
+        else if (tcharSection === 'efficiency') tcharBuf.effMatrix.push(numsT);
+      }
+      continue;
+    }
 
     if (inPchar) {
       if (/^FINISH\b/i.test(upper)) {
@@ -193,6 +250,77 @@ function parseElementProperties(lines: string[]): ParsedElements {
       inPchar = true;
       pcharSection = 'none';
       pcharBuf = { sratio: [], qratio: [], hratio: [], tratio: [] };
+      continue;
+    }
+
+    if (/^TCHAR\s+TYPE\s+(\d+)/i.test(trimmed)) {
+      const m = trimmed.match(/^TCHAR\s+TYPE\s+(\d+)/i);
+      tcharType = parseInt(m![1]);
+      inTchar = true;
+      tcharSection = 'none';
+      tcharBuf = { gate: [], head: [], qMatrix: [], effMatrix: [] };
+      continue;
+    }
+
+    if (/^TURBINE\b/i.test(upper)) {
+      const fullLine = [trimmed];
+      for (let j = i + 1; j < lines.length; j++) {
+        const ln = lines[j].trim();
+        if (!ln) continue;
+        if (/^FINISH\b/i.test(ln)) { fullLine.push(ln); i = j; break; }
+        if (/^RESERVOIR\b|^CONDUIT\b|^PUMP\b|^TURBINE\b|^ONEWAY\b|^PCHAR\b|^TCHAR\b|^OPPUMP\b|^OPTURB\b/i.test(ln)) { i = j - 1; break; }
+        fullLine.push(ln);
+      }
+      const combined = fullLine.join(' ');
+      const idM = combined.match(/\bID\s+(\S+)/i);
+      const typeM = combined.match(/\bTYPE\s+(\d+)/i);
+      const rspeedM = combined.match(/\bRSPEED\s+([\-\d.]+)/i);
+      const wr2M = combined.match(/\bWR2\s+([\-\d.]+)/i);
+      const fricM = combined.match(/\bFRICTION\s+([\-\d.]+)/i);
+      const windM = combined.match(/\bWINDAGE\s+([\-\d.]+)/i);
+      if (idM) {
+        turbines.set(idM[1], {
+          turbineType: typeM ? parseInt(typeM[1]) : 1,
+          syncSpeed: rspeedM ? parseFloat(rspeedM[1]) : 0,
+          wr2: wr2M ? parseFloat(wr2M[1]) : 0,
+          turbFriction: fricM ? parseFloat(fricM[1]) : 0,
+          windage: windM ? parseFloat(windM[1]) : 0,
+        });
+      }
+      continue;
+    }
+
+    if (/^OPTURB\b/i.test(upper)) {
+      const idM = trimmed.match(/\bID\s+(\S+)/i);
+      if (idM) {
+        const rest = trimmed.replace(/.*\bID\s+\S+\s*/i, '').replace(/\s*FINISH\b.*/i, '').trim();
+        const parts = rest.split(/\s+/);
+        const mode = parts[0] || 'TURBINE';
+        const vSchedNum = parts[1] ? parseInt(parts[1]) : undefined;
+        opturbs.set(idM[1], { mode, vScheduleNumber: vSchedNum });
+      }
+      continue;
+    }
+
+    if (/^SCHEDULE\b.*\bVSCHEDULE\b/i.test(upper)) {
+      const numM = trimmed.match(/\bVSCHEDULE\s+(\d+)/i);
+      if (numM) {
+        const schedNum = parseInt(numM[1]);
+        const pts: { t: number; g: number }[] = [];
+        const tgMatches = trimmed.matchAll(/\bT\s+([\d.]+)\s+G\s+([\d.]+)/gi);
+        for (const m of tgMatches) {
+          pts.push({ t: parseFloat(m[1]), g: parseFloat(m[2]) });
+        }
+        if (pts.length === 0) {
+          for (let j = i + 1; j < lines.length; j++) {
+            const ln = lines[j].trim();
+            if (!ln || /^FINISH\b/i.test(ln)) { i = j; break; }
+            const tgInline = ln.matchAll(/\bT\s+([\d.]+)\s+G\s+([\d.]+)/gi);
+            for (const m of tgInline) pts.push({ t: parseFloat(m[1]), g: parseFloat(m[2]) });
+          }
+        }
+        vSchedules.set(schedNum, pts);
+      }
       continue;
     }
 
@@ -352,17 +480,20 @@ function parseElementProperties(lines: string[]): ParsedElements {
   if (inPchar) {
     flushPchar();
   }
+  if (inTchar) {
+    flushTchar();
+  }
 
-  return { reservoirs, conduits, pumps, oneway, oppumps, pchar };
+  return { reservoirs, conduits, pumps, turbines, oneway, oppumps, opturbs, pchar, tchar, vSchedules };
 }
 
 function buildReactFlowGraph(
   topo: ParsedTopology,
   elems: ParsedElements,
   projectName: string
-): { nodes: WhamoNode[]; edges: WhamoEdge[]; pcharData: Record<number, PcharType> } {
+): { nodes: WhamoNode[]; edges: WhamoEdge[]; pcharData: Record<number, PcharType>; tcharData: Record<number, TcharType>; vSchedules: Record<number, { t: number; g: number }[]> } {
   const { elemLinks, elemAt, junctions, nodeElevations } = topo;
-  const { reservoirs, conduits, pumps, oneway, oppumps } = elems;
+  const { reservoirs, conduits, pumps, turbines, oneway, oppumps, opturbs } = elems;
 
   let rfIdCounter = 1;
   const nextId = () => String(rfIdCounter++);
@@ -546,6 +677,54 @@ function buildReactFlowGraph(
       return;
     }
 
+    if (turbines.has(elemId)) {
+      const t = turbines.get(elemId)!;
+      const rfId = nextId();
+      const tPos = getPumpPos(from, to);
+      const posKey = `${Math.round(tPos.x)},${Math.round(tPos.y)}`;
+      const finalPos = usedNodePositions.has(posKey)
+        ? { x: tPos.x, y: tPos.y + 30 }
+        : tPos;
+      usedNodePositions.add(posKey);
+
+      const fromRfId = getOrCreateWhamoNode(from);
+      const toRfId = getOrCreateWhamoNode(to);
+      const opInfo = opturbs.get(elemId);
+      nodeObjects.push({
+        id: rfId,
+        type: 'turbine',
+        position: finalPos,
+        data: {
+          label: elemId,
+          type: 'turbine',
+          nodeNumber: parseInt(from) || nodeObjects.length,
+          elevation: nodeElevations.get(from) ?? 0,
+          turbineType: t.turbineType,
+          syncSpeed: t.syncSpeed,
+          wr2: t.wr2,
+          turbFriction: t.turbFriction,
+          windage: t.windage,
+          operationMode: opInfo?.mode || 'TURBINE',
+          vScheduleNumber: opInfo?.vScheduleNumber ?? 1,
+        }
+      });
+      edgeObjects.push({
+        id: nextId(),
+        source: fromRfId,
+        target: rfId,
+        type: 'connection',
+        data: { label: `${elemId}_in`, type: 'conduit', length: 0, diameter: 0, celerity: 0, friction: 0 }
+      });
+      edgeObjects.push({
+        id: nextId(),
+        source: rfId,
+        target: toRfId,
+        type: 'connection',
+        data: { label: `${elemId}_out`, type: 'conduit', length: 0, diameter: 0, celerity: 0, friction: 0 }
+      });
+      return;
+    }
+
     if (oneway.has(elemId)) {
       const vc = oneway.get(elemId)!;
       const rfId = nextId();
@@ -648,7 +827,13 @@ function buildReactFlowGraph(
   const pcharData: Record<number, PcharType> = {};
   elems.pchar.forEach((pc, pType) => { pcharData[pType] = pc; });
 
-  return { nodes: nodeObjects, edges: edgeObjects, pcharData };
+  const tcharData: Record<number, TcharType> = {};
+  elems.tchar.forEach((tc, tType) => { tcharData[tType] = tc; });
+
+  const vSchedulesObj: Record<number, { t: number; g: number }[]> = {};
+  elems.vSchedules.forEach((pts, num) => { vSchedulesObj[num] = pts; });
+
+  return { nodes: nodeObjects, edges: edgeObjects, pcharData, tcharData, vSchedules: vSchedulesObj };
 }
 
 export function parseInpFile(content: string): {
@@ -657,6 +842,8 @@ export function parseInpFile(content: string): {
   projectName: string;
   computationalParams?: any;
   pcharData: Record<number, PcharType>;
+  tcharData: Record<number, TcharType>;
+  vSchedules: Record<number, { t: number; g: number }[]>;
 } {
   const lines = content.split('\n');
 
@@ -690,7 +877,7 @@ export function parseInpFile(content: string): {
   }
   const computationalParams = { stages: [{ dtcomp, dtout, tmax }], accutest: 'NONE' as const, includeAccutest: true };
 
-  const { nodes, edges, pcharData } = buildReactFlowGraph(topo, elems, projectName);
+  const { nodes, edges, pcharData, tcharData, vSchedules } = buildReactFlowGraph(topo, elems, projectName);
 
-  return { nodes, edges, projectName, computationalParams, pcharData };
+  return { nodes, edges, projectName, computationalParams, pcharData, tcharData, vSchedules };
 }

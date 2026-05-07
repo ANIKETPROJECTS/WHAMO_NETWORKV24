@@ -1,4 +1,4 @@
-import { WhamoNode, WhamoEdge, useNetworkStore } from './store';
+import { WhamoNode, WhamoEdge, useNetworkStore, TcharType } from './store';
 import { saveAs } from 'file-saver';
 
 export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDownload: boolean | string = true) {
@@ -71,7 +71,7 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
     const actualNodeId = getPosition(nodeId);
 
     // Elements AT this node
-    if (node.type === 'reservoir' || node.type === 'surgeTank' || node.type === 'flowBoundary' || node.type === 'pump' || node.type === 'checkValve') {
+    if (node.type === 'reservoir' || node.type === 'surgeTank' || node.type === 'flowBoundary' || node.type === 'pump' || node.type === 'checkValve' || node.type === 'turbine') {
       connectivityLines.push(`ELEM ${node.data.label} AT ${actualNodeId}`);
       nodeIdsWithSpecialElements.add(actualNodeId);
     }
@@ -395,6 +395,24 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
     addL('');
   });
 
+  const exportedTurbineLabels = new Set<string>();
+  nodes.filter(n => n.type === 'turbine').forEach(n => {
+    const d = n.data;
+    if (!d) return;
+    const label = d.label;
+    if (exportedTurbineLabels.has(label)) return;
+    exportedTurbineLabels.add(label);
+    addComment(d.comment);
+    const tType = d.turbineType ?? 1;
+    const rspeed = Number(d.syncSpeed ?? 0);
+    const wr2 = Number(d.wr2 ?? 0);
+    const friction = Number(d.turbFriction ?? 0);
+    const windage = Number(d.windage ?? 0);
+    addL(`TURBINE ID ${label} TYPE ${tType} RSPEED ${rspeed} WR2 ${wr2}`);
+    addL(` FRICTION ${friction} WINDAGE ${windage} FINISH`);
+    addL('');
+  });
+
   // PCHAR sections (global, per pump type)
   const pcharData = state.pcharData || {};
   const pcharTypes = Object.keys(pcharData).map(Number).sort();
@@ -417,6 +435,33 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
     addL('');
   });
 
+  // TCHAR sections (global, per turbine type)
+  const tcharData = state.tcharData || {};
+  const tcharTypes = Object.keys(tcharData).map(Number).sort();
+  tcharTypes.forEach(tType => {
+    const tc = tcharData[tType];
+    if (!tc) return;
+    addL(`TCHAR TYPE ${tType}`);
+    if (tc.gate.length > 0) {
+      addL('GATE');
+      addL(tc.gate.join(' '));
+    }
+    if (tc.head.length > 0) {
+      addL('HEAD');
+      addL(tc.head.join(' '));
+    }
+    if (tc.qMatrix.length > 0) {
+      addL('QMATRIX');
+      tc.qMatrix.forEach(row => addL(row.join(' ')));
+    }
+    if (tc.effMatrix.length > 0) {
+      addL('EFFICIENCY');
+      tc.effMatrix.forEach(row => addL(row.join(' ')));
+    }
+    addL('FINISH');
+    addL('');
+  });
+
   // OPPUMP for active pumps
   const activePumps = nodes.filter(n => n.type === 'pump' && n.data?.pumpStatus !== 'INACTIVE');
   const seenOppump = new Set<string>();
@@ -426,6 +471,44 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
     seenOppump.add(label);
     addL(`OPPUMP ID ${label} PUMP FINISH`);
     addL('');
+  });
+
+  // OPTURB for turbines
+  const seenOpturb = new Set<string>();
+  nodes.filter(n => n.type === 'turbine').forEach(n => {
+    const d = n.data;
+    if (!d) return;
+    const label = d.label;
+    if (!label || seenOpturb.has(label)) return;
+    seenOpturb.add(label);
+    const mode = (d.operationMode as string) || 'TURBINE';
+    if (mode === 'TURBGOV' || mode === 'EMERGENCY') {
+      const schedNum = d.vScheduleNumber ?? 1;
+      addL(`OPTURB ID ${label} ${mode} ${schedNum} FINISH`);
+    } else {
+      addL(`OPTURB ID ${label} TURBINE FINISH`);
+    }
+    addL('');
+  });
+
+  // VSCHEDULE blocks for turbines with TURBGOV/EMERGENCY modes
+  const vSchedules = state.vSchedules || {};
+  const usedVScheduleNums = new Set<number>();
+  nodes.filter(n => n.type === 'turbine').forEach(n => {
+    const mode = (n.data?.operationMode as string) || 'TURBINE';
+    if (mode === 'TURBGOV' || mode === 'EMERGENCY') {
+      const num = Number(n.data?.vScheduleNumber ?? 1);
+      if (!isNaN(num)) usedVScheduleNums.add(num);
+    }
+  });
+  usedVScheduleNums.forEach(schedNum => {
+    const pts = vSchedules[schedNum] || [];
+    if (pts.length > 0) {
+      const pairStr = pts.map(p => `T ${p.t} G ${p.g}`).join(' ');
+      addL(`SCHEDULE  VSCHEDULE ${schedNum} ${pairStr}`);
+      addL('FINISH');
+      addL('');
+    }
   });
 
   addL('');

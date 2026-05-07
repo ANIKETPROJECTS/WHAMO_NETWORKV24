@@ -1,5 +1,5 @@
 import { useState, useEffect, type ComponentProps } from 'react';
-import { useNetworkStore, type UnitSystem, type PcharType } from '@/lib/store';
+import { useNetworkStore, type UnitSystem, type PcharType, type TcharType } from '@/lib/store';
 import { PIPE_MATERIALS, PIPE_MATERIALS_BY_ID } from '@/lib/pipe-materials';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -142,6 +142,87 @@ function PcharEditor({ pType, activePc, updatePcharData }: {
   );
 }
 
+function TcharEditor({ tType, activeTc, updateTcharData }: {
+  tType: number;
+  activeTc: TcharType;
+  updateTcharData: (turbineType: number, data: TcharType) => void;
+}) {
+  const arrToText = (arr: number[]) => arr.join(' ');
+  const matToText = (m: number[][]) => m.map(r => r.join(' ')).join('\n');
+  const textToArr = (text: string): number[] =>
+    text.trim().split(/[\s,\n]+/).map(parseFloat).filter(n => !isNaN(n));
+  const textToMat = (text: string): number[][] =>
+    text.trim().split('\n').map(row => row.trim().split(/\s+/).map(parseFloat).filter(n => !isNaN(n))).filter(r => r.length > 0);
+
+  const [show, setShow] = useState(false);
+  const [gateText, setGateText] = useState(() => arrToText(activeTc.gate));
+  const [headText, setHeadText] = useState(() => arrToText(activeTc.head));
+  const [qText, setQText] = useState(() => matToText(activeTc.qMatrix));
+  const [effText, setEffText] = useState(() => matToText(activeTc.effMatrix));
+
+  useEffect(() => {
+    setGateText(arrToText(activeTc.gate));
+    setHeadText(arrToText(activeTc.head));
+    setQText(matToText(activeTc.qMatrix));
+    setEffText(matToText(activeTc.effMatrix));
+  }, [tType]);
+
+  const save = (updates: Partial<TcharType>) => updateTcharData(tType, { ...activeTc, ...updates });
+
+  return (
+    <div className="border rounded-md overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold bg-teal-50 hover:bg-teal-100 transition-colors text-teal-800"
+        onClick={() => setShow(v => !v)}
+        data-testid="btn-toggle-tchar"
+        type="button"
+      >
+        <span>Turbine Characteristics (TCHAR TYPE {tType})</span>
+        {show ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+      </button>
+      {show && (
+        <div className="p-3 space-y-3 bg-white">
+          <p className="text-[10px] text-muted-foreground italic">
+            TCHAR TYPE {tType} data is global — shared across all turbines of this type.
+          </p>
+          <div className="grid gap-1">
+            <Label className="text-[10px] font-medium">GATE (gate opening fractions, space-separated)</Label>
+            <textarea data-testid="textarea-gate"
+              className="w-full border rounded text-[10px] font-mono p-1.5 resize-none h-10 focus:outline-none focus:ring-1 focus:ring-teal-400"
+              value={gateText}
+              onChange={e => setGateText(e.target.value)}
+              onBlur={e => save({ gate: textToArr(e.target.value) })} />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-[10px] font-medium">HEAD (head values, space-separated)</Label>
+            <textarea data-testid="textarea-head"
+              className="w-full border rounded text-[10px] font-mono p-1.5 resize-none h-10 focus:outline-none focus:ring-1 focus:ring-teal-400"
+              value={headText}
+              onChange={e => setHeadText(e.target.value)}
+              onBlur={e => save({ head: textToArr(e.target.value) })} />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-[10px] font-medium">QMATRIX (one row per gate value)</Label>
+            <textarea data-testid="textarea-qmatrix"
+              className="w-full border rounded text-[10px] font-mono p-1.5 resize-none h-24 focus:outline-none focus:ring-1 focus:ring-teal-400"
+              value={qText}
+              onChange={e => setQText(e.target.value)}
+              onBlur={e => save({ qMatrix: textToMat(e.target.value) })} />
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-[10px] font-medium">EFFICIENCY (one row per gate value)</Label>
+            <textarea data-testid="textarea-efficiency"
+              className="w-full border rounded text-[10px] font-mono p-1.5 resize-none h-24 focus:outline-none focus:ring-1 focus:ring-teal-400"
+              value={effText}
+              onChange={e => setEffText(e.target.value)}
+              onBlur={e => save({ effMatrix: textToMat(e.target.value) })} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PropertiesPanel() {
 
   const { 
@@ -160,6 +241,13 @@ export function PropertiesPanel() {
     updatePcharData,
     addPcharType,
     deletePcharType,
+    tcharData,
+    updateTcharData,
+    addTcharType,
+    deleteTcharType,
+    vSchedules,
+    updateVSchedule,
+    addVSchedule,
     qSchedules,
     updateQSchedule,
     applyMaterialToAllConduits,
@@ -1018,6 +1106,144 @@ export function PropertiesPanel() {
                 </div>
 
                 <PcharEditor pType={pType} activePc={activePc} updatePcharData={updatePcharData} />
+              </>
+            );
+          })()}
+
+          {isNode && element.data?.type === 'turbine' && (() => {
+            const tType = Number(formData.turbineType ?? 1);
+            const activeTc: TcharType = tcharData[tType] || { gate: [], head: [], qMatrix: [], effMatrix: [] };
+            const tcharTypeOptions = Object.keys(tcharData).map(Number).sort((a, b) => a - b)
+              .map(t => ({ label: `TYPE ${t}`, value: String(t) }));
+            const opMode = (formData.operationMode as string) || 'TURBINE';
+            return (
+              <>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold text-teal-800">Turbine Properties</Label>
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="sm" className="h-6 text-[10px] px-1.5"
+                      onClick={() => {
+                        const nums = Object.keys(tcharData).map(Number);
+                        const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+                        addTcharType(next);
+                      }}>+ TCHAR</Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="turbineType" className="text-xs">TCHAR Type</Label>
+                  <Select
+                    value={String(tType)}
+                    onValueChange={v => handleLocalChange('turbineType', Number(v))}
+                  >
+                    <SelectTrigger id="turbineType" className="h-7 text-xs">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(tcharTypeOptions.length > 0 ? tcharTypeOptions : [{ label: 'TYPE 1', value: '1' }]).map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1">
+                    <Label htmlFor="syncSpeed" className="text-xs">Sync Speed RSPEED (RPM)</Label>
+                    <NumericInput id="syncSpeed" data-testid="input-syncspeed"
+                      value={formData.syncSpeed}
+                      onValueChange={v => handleLocalChange('syncSpeed', v)} className="h-7 text-xs" />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="turb-wr2" className="text-xs">WR² (Inertia)</Label>
+                    <NumericInput id="turb-wr2" data-testid="input-turb-wr2"
+                      value={formData.wr2}
+                      onValueChange={v => handleLocalChange('wr2', v)} className="h-7 text-xs" />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="turbFriction" className="text-xs">Friction</Label>
+                    <NumericInput id="turbFriction" data-testid="input-turbfriction"
+                      value={formData.turbFriction}
+                      onValueChange={v => handleLocalChange('turbFriction', v)} className="h-7 text-xs" />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="windage" className="text-xs">Windage</Label>
+                    <NumericInput id="windage" data-testid="input-windage"
+                      value={formData.windage}
+                      onValueChange={v => handleLocalChange('windage', v)} className="h-7 text-xs" />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="operationMode" className="text-xs">Operation Mode (OPTURB)</Label>
+                  <Select value={opMode} onValueChange={v => handleLocalChange('operationMode', v)}>
+                    <SelectTrigger id="operationMode" className="h-7 text-xs">
+                      <SelectValue placeholder="Mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TURBINE">TURBINE</SelectItem>
+                      <SelectItem value="TURBGOV">TURBGOV</SelectItem>
+                      <SelectItem value="EMERGENCY">EMERGENCY</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {(opMode === 'TURBGOV' || opMode === 'EMERGENCY') && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="vScheduleNumber" className="text-xs">VSCHEDULE Number</Label>
+                    <NumericInput id="vScheduleNumber" data-testid="input-vschednum"
+                      value={formData.vScheduleNumber}
+                      onValueChange={v => handleLocalChange('vScheduleNumber', v)} className="h-7 text-xs" />
+                  </div>
+                )}
+
+                {(opMode === 'TURBGOV' || opMode === 'EMERGENCY') && (() => {
+                  const schedNum = Number(formData.vScheduleNumber ?? 1);
+                  const pts: { t: number; g: number }[] = vSchedules[schedNum] || [];
+                  return (
+                    <div className="border rounded-md overflow-hidden">
+                      <div className="px-3 py-2 text-xs font-semibold bg-teal-50 text-teal-800 flex items-center justify-between">
+                        <span>VSCHEDULE {schedNum} (T/G pairs)</span>
+                        <Button variant="outline" size="sm" className="h-5 text-[10px] px-1"
+                          onClick={() => {
+                            if (!vSchedules[schedNum]) addVSchedule(schedNum);
+                            updateVSchedule(schedNum, [...pts, { t: 0, g: 1.0 }]);
+                          }}>+ Pair</Button>
+                      </div>
+                      <div className="p-2 space-y-1 bg-white">
+                        {pts.length === 0 && (
+                          <p className="text-[10px] text-muted-foreground italic text-center py-1">No T/G pairs. Add one above.</p>
+                        )}
+                        {pts.map((pt, idx) => (
+                          <div key={idx} className="flex items-center gap-2 group">
+                            <Label className="text-[10px] w-4">T</Label>
+                            <input className="flex-1 h-6 px-1.5 text-[10px] border rounded"
+                              value={pt.t}
+                              onChange={e => {
+                                const np = [...pts];
+                                np[idx] = { ...np[idx], t: parseFloat(e.target.value) || 0 };
+                                updateVSchedule(schedNum, np);
+                              }} />
+                            <Label className="text-[10px] w-4">G</Label>
+                            <input className="flex-1 h-6 px-1.5 text-[10px] border rounded"
+                              value={pt.g}
+                              onChange={e => {
+                                const np = [...pts];
+                                np[idx] = { ...np[idx], g: parseFloat(e.target.value) || 0 };
+                                updateVSchedule(schedNum, np);
+                              }} />
+                            <button className="opacity-0 group-hover:opacity-100 text-destructive"
+                              onClick={() => updateVSchedule(schedNum, pts.filter((_, i) => i !== idx))}>
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <TcharEditor tType={tType} activeTc={activeTc} updateTcharData={updateTcharData} />
               </>
             );
           })()}

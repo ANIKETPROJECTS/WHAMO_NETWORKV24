@@ -15,7 +15,7 @@ export interface NodeSequenceViolation {
   elementType?: string;
 }
 
-const elementTypes = new Set(['pump', 'checkValve']);
+const elementTypes = new Set(['pump', 'checkValve', 'turbine']);
 
 function isBranchingJunction(node: WhamoNode, connectionCount: number): boolean {
   return node.type === 'junction' && connectionCount > 2;
@@ -244,6 +244,12 @@ export function validateNetwork(nodes: WhamoNode[], edges: WhamoEdge[]): { error
     if (n.type === 'checkValve') {
       if (connections.length < 1) {
         addError(n.id, `Check Valve ${d.label} must connect to at least one pipe.`, d.label, n.type);
+      }
+    }
+
+    if (n.type === 'turbine') {
+      if (connections.length < 1) {
+        addError(n.id, `Turbine ${d.label} must connect to at least one pipe.`, d.label, n.type);
       }
     }
 

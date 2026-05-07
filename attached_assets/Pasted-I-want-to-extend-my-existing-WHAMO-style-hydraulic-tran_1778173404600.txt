@@ -1,0 +1,290 @@
+I want to extend my existing WHAMO-style hydraulic transient simulation project by adding a fully functional Turbine Element similar to existing elements like Pump, Valve, Conduit, Surge Tank, Reservoir, and FlowBC.
+
+Read the existing project architecture first and integrate the turbine cleanly into the current codebase without breaking existing functionality.
+
+The uploaded documentation defines the exact behavior, UI structure, validation logic, unit conversion rules, and .INP export syntax that must be implemented.
+
+OBJECTIVE
+
+Add a new edge element called:
+
+Turbine
+
+This element must behave similarly to a Pump element in terms of graph connectivity and rendering, but it represents energy extraction instead of energy addition.
+
+CORE REQUIREMENTS
+1. Add Turbine to Element Palette
+
+Add a new selectable tool in the left toolbar/palette:
+
+Name: Turbine
+Category: Edge Element
+Placement Behavior:
+User clicks start node
+User clicks end node
+Turbine edge is created
+
+Use the same interaction pattern already used for:
+
+Conduit
+Pump
+Valve
+2. Turbine Visual Design
+
+Create a turbine symbol/icon similar to a pump but visually indicating reverse energy transfer.
+
+Requirements:
+
+Directional arrow
+Flow direction visible
+Distinct turbine styling
+Must rotate according to connected nodes
+Must render properly on zoom/pan
+
+If SVG icons are used elsewhere, follow same approach.
+
+3. Turbine Data Model
+
+Add turbine type to the application state/store/schema.
+
+Turbine must support these properties:
+
+{
+  id: string,
+  type: string,
+  startNodeId: string,
+  endNodeId: string,
+
+  diameter: number,
+  syncSpeed: number,
+  wr2: number,
+  friction: number,
+  windage: number,
+
+  operationMode: "GENERATE",
+
+  vSchedule: string,
+
+  units: "SI" | "FPS"
+}
+4. Add Turbine Properties Panel
+
+When turbine is selected, open a dedicated properties panel.
+
+Use same UI styling as existing Pump/Valve property editors.
+
+Organize into 3 collapsible sections:
+
+A. Basic Parameters
+
+Fields:
+
+Label	Key	Unit
+Turbine ID	id	—
+Type	type	—
+Diameter	diameter	m / ft
+Sync Speed	syncSpeed	RPM
+WR²	wr2	kg·m² / lb·ft²
+Friction Loss	friction	kW / HP
+Windage Loss	windage	kW / HP
+B. Operation Parameters
+
+Fields:
+
+Label	Key
+Mode	operationMode
+Gate Schedule	vSchedule
+
+Mode must default to:
+
+GENERATE
+C. Turbine Characteristics (TCHAR)
+
+Create a global/shared TCHAR editor system.
+
+A TCHAR definition contains:
+
+{
+  type: string,
+  gate: number[],
+  head: number[],
+  qMatrix: number[][],
+  efficiencyMatrix: number[][]
+}
+
+Add editable UI table/grid for:
+
+Gate %
+Head
+Q values
+Efficiency values
+
+Support dynamic row/column editing.
+
+5. Global TCHAR Store
+
+TCHAR definitions are shared globally.
+
+Create centralized storage like:
+
+{
+  tchar: {
+    type1: {...},
+    type2: {...}
+  }
+}
+
+Do NOT store TCHAR inside individual turbine objects.
+
+6. Add VSCHEDULE Support
+
+Implement turbine gate schedules.
+
+Schedule structure:
+
+{
+  id: string,
+  points: [
+    { t: number, g: number }
+  ]
+}
+
+Add schedule editor UI:
+
+Add/remove rows
+Time column
+Gate opening column
+Validation support
+7. Connectivity Validation
+
+Before simulation/export validate:
+
+Turbine Rules
+Rule 1
+
+Turbine must connect exactly 2 nodes.
+
+Rule 2
+
+Downstream node MUST be Reservoir.
+
+NOT allowed:
+
+FlowBC
+Open boundary
+Rule 3
+
+Referenced TCHAR TYPE must exist.
+
+Rule 4
+
+Referenced VSCHEDULE must exist.
+
+Show user-friendly validation errors in UI.
+
+8. SI ↔ FPS Unit Conversion
+
+Implement automatic conversion support.
+
+Conversion rules:
+
+Quantity	SI	FPS	Factor
+Flow	m³/s	CFS	×35.3147
+Head	m	ft	×3.28084
+Diameter	m	ft	×3.28084
+Power	kW	HP	×1.341
+WR²	kg·m²	lb·ft²	×23.73
+
+Ensure conversions occur:
+
+In UI
+During import/export
+On unit system toggle
+9. .INP Export Integration
+
+Extend existing .INP generator.
+
+Generate blocks in this EXACT order:
+
+SYSTEM
+CONDUITS
+RESERVOIRS
+TURBINES
+TCHAR
+OPTURB
+SCHEDULE
+OUTPUT
+CONTROL
+TURBINE Block
+TURBINE
+ ID T1
+ TYPE 1
+ SYNCSPD 300
+ WR2 500000
+ DIAMETER 5
+ FRICTION 50.
+ WINDAGE 10.
+FINISH
+TCHAR Block
+TCHAR TYPE 1
+ GATE 20. 40. 60. 80. 100.
+ HEAD 200. 150. 100. 50.
+ Q
+  ...
+ EFFICIENCY
+  ...
+FINISH
+OPTURB Block
+OPTURB
+ ID T1
+ GENERATE
+ VSCHEDULE 1
+FINISH
+SCHEDULE Block
+SCHEDULE
+ VSCHEDULE 1
+   T 0.0  G 100.0
+   T 10.0 G 0.0
+FINISH
+10. Import Parsing Support
+
+If the project already supports .INP import:
+
+Add parser support for:
+
+TURBINE
+TCHAR
+OPTURB
+SCHEDULE
+
+Restore all turbine data correctly into UI/state.
+
+11. Runtime Error Handling
+
+Surface these errors in UI:
+
+Error	Cause	Fix
+OPERATION NOT SPECIFIED	Missing OPTURB	Add OPTURB block
+CHARACTERISTICS TYPE NOT SPECIFIED	Missing TCHAR	Define matching TYPE
+FLOW NOT CORRECT	Invalid downstream node	Use tailwater reservoir
+NO TRANSIENT	Flat schedule	Add changing gate values
+12. Supported Use Cases
+
+Ensure turbine supports:
+
+Steady state operation
+Load rejection
+Load increase
+Multiple turbines sharing same TCHAR
+Independent VSCHEDULE control
+13. Code Quality Requirements
+
+IMPORTANT:
+
+Follow existing project architecture
+Reuse existing edge rendering system
+Reuse property panel components where possible
+Maintain TypeScript typings
+Avoid duplicate logic
+Add comments only where necessary
+Keep code modular and production quality

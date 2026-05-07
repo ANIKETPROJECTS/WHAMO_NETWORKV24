@@ -39,7 +39,7 @@ function buildCacheUpdate(
 
 type FilterKey =
   | 'all' | 'conduit' | 'dummy'
-  | 'node' | 'reservoir' | 'junction' | 'surgeTank' | 'flowBoundary' | 'pump' | 'checkValve';
+  | 'node' | 'reservoir' | 'junction' | 'surgeTank' | 'flowBoundary' | 'pump' | 'checkValve' | 'turbine';
 
 interface UnifiedRow {
   id: string;
@@ -51,7 +51,7 @@ interface UnifiedRow {
 const NODE_TYPE_LABEL: Record<string, string> = {
   reservoir: 'Reservoir', node: 'Node', junction: 'Junction',
   surgeTank: 'Surge Tank', flowBoundary: 'Flow BC',
-  pump: 'Pump', checkValve: 'Check Valve',
+  pump: 'Pump', checkValve: 'Check Valve', turbine: 'Turbine',
   conduit: 'Conduit', dummy: 'Dummy Pipe',
 };
 const TYPE_BADGE: Record<string, string> = {
@@ -62,6 +62,7 @@ const TYPE_BADGE: Record<string, string> = {
   flowBoundary: 'bg-green-100 text-green-700 border-green-200',
   pump:         'bg-orange-100 text-orange-600 border-orange-300',
   checkValve:   'bg-violet-100 text-violet-700 border-violet-200',
+  turbine:      'bg-teal-100 text-teal-700 border-teal-200',
   conduit:      'bg-indigo-100 text-indigo-700 border-indigo-200',
   dummy:        'bg-purple-100 text-purple-700 border-purple-200',
 };
@@ -77,6 +78,7 @@ const FILTER_CHIPS: { key: FilterKey; label: string }[] = [
   { key: 'flowBoundary',label: 'Flow BC'      },
   { key: 'pump',        label: 'Pump'         },
   { key: 'checkValve',  label: 'Check Valve'  },
+  { key: 'turbine',     label: 'Turbine'      },
 ];
 
 function matchesFilter(row: UnifiedRow, filter: FilterKey): boolean {
@@ -101,6 +103,7 @@ const COLS: Record<FilterKey, ColKey[]> = {
   flowBoundary:['rowNum','unitToggle','label','nodeNum','schedNum','qSchedPairs','comment'],
   pump:        ['rowNum','unitToggle','label','nodeNum','elevation','pumpStatus','pumpType','rq','rhead','rspeed','rtorque','wr2','comment'],
   checkValve:  ['rowNum','unitToggle','label','nodeNum','elevation','valveStatus','valveDiam','comment'],
+  turbine:     ['rowNum','unitToggle','label','nodeNum','elevation','turbineType','syncSpeed','turbWr2','turbFriction','windage','operationMode','vScheduleNum','comment'],
 };
 
 // ─── Pairs editor state ───────────────────────────────────────────────────────
@@ -480,6 +483,8 @@ function ColHeader({ col, unit }: { col: ColKey; unit: UnitSystem }) {
     pumpStatus: 'Status', pumpType: 'PCHAR Type',
     rq: `RQ (${V})`, rhead: `RHEAD (${L})`, rspeed: 'RSPEED (RPM)', rtorque: 'RTOROUE', wr2: 'WR²',
     valveStatus: 'Status', valveDiam: `Diam (${L})`,
+    turbineType: 'TCHAR Type', syncSpeed: 'Sync Speed (RPM)', turbWr2: 'WR²',
+    turbFriction: 'Friction', windage: 'Windage', operationMode: 'Mode', vScheduleNum: 'V Sched #',
     comment: 'Comment',
   };
   return (
@@ -518,6 +523,7 @@ function RowCells({
   const isFlow = row.subType === 'flowBoundary';
   const isPump = row.subType === 'pump';
   const isCheckValve = row.subType === 'checkValve';
+  const isTurbine = row.subType === 'turbine';
 
   // Each row uses its own unit (per-element override) or falls back to global
   const rowUnit: UnitSystem = (d.unit as UnitSystem) || unit;
@@ -908,6 +914,42 @@ function RowCells({
       <EditableCell key={col} value={isCheckValve ? fmt(d.valveDiam ?? 0) : ''} type="text" inputMode="decimal"
         readOnly={!isCheckValve} dimmed={!isCheckValve}
         onChange={v => changeNode('valveDiam', v)} testId={`cell-valvediam-${row.id}`} />
+    );
+    case 'turbineType': return (
+      <EditableCell key={col} value={isTurbine ? String(d.turbineType ?? 1) : ''} type="text" inputMode="decimal"
+        readOnly={!isTurbine} dimmed={!isTurbine}
+        onChange={v => changeNode('turbineType', v)} testId={`cell-turbtype-${row.id}`} />
+    );
+    case 'syncSpeed': return (
+      <EditableCell key={col} value={isTurbine ? fmt(d.syncSpeed ?? 0) : ''} type="text" inputMode="decimal"
+        readOnly={!isTurbine} dimmed={!isTurbine}
+        onChange={v => changeNode('syncSpeed', v)} testId={`cell-syncspeed-${row.id}`} />
+    );
+    case 'turbWr2': return (
+      <EditableCell key={col} value={isTurbine ? fmt(d.wr2 ?? 0) : ''} type="text" inputMode="decimal"
+        readOnly={!isTurbine} dimmed={!isTurbine}
+        onChange={v => changeNode('wr2', v)} testId={`cell-turbwr2-${row.id}`} />
+    );
+    case 'turbFriction': return (
+      <EditableCell key={col} value={isTurbine ? fmt(d.turbFriction ?? 0) : ''} type="text" inputMode="decimal"
+        readOnly={!isTurbine} dimmed={!isTurbine}
+        onChange={v => changeNode('turbFriction', v)} testId={`cell-turbfriction-${row.id}`} />
+    );
+    case 'windage': return (
+      <EditableCell key={col} value={isTurbine ? fmt(d.windage ?? 0) : ''} type="text" inputMode="decimal"
+        readOnly={!isTurbine} dimmed={!isTurbine}
+        onChange={v => changeNode('windage', v)} testId={`cell-windage-${row.id}`} />
+    );
+    case 'operationMode': return (
+      <SelectCell key={col} value={d.operationMode || 'TURBINE'}
+        options={[{label:'TURBINE',value:'TURBINE'},{label:'TURBGOV',value:'TURBGOV'},{label:'EMERGENCY',value:'EMERGENCY'}]}
+        dimmed={!isTurbine} onChange={isTurbine ? v => changeNode('operationMode', v) : undefined} testId={`cell-opmode-${row.id}`} />
+    );
+    case 'vScheduleNum': return (
+      <EditableCell key={col} value={isTurbine ? String(d.vScheduleNumber ?? 1) : ''} type="text" inputMode="decimal"
+        readOnly={!isTurbine || (d.operationMode !== 'TURBGOV' && d.operationMode !== 'EMERGENCY')}
+        dimmed={!isTurbine || (d.operationMode !== 'TURBGOV' && d.operationMode !== 'EMERGENCY')}
+        onChange={v => changeNode('vScheduleNumber', v)} testId={`cell-vschednum-${row.id}`} />
     );
     case 'comment': return (
       <EditableCell key={col} value={d.comment ?? ''} onChange={v => change('comment', v)}

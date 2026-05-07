@@ -103,6 +103,7 @@ export function Toolbar({ onExport, onSave, onLoad }: { onExport: (fileName?: st
     { label: 'Flow BC', icon: ArrowRightCircle, action: () => addNode('flowBoundary', { x: 50, y: 150 }), color: 'text-green-600' },
     { label: 'Pump', icon: PlayCircle, action: () => addNode('pump', { x: 300, y: 150 }), color: 'text-orange-500' },
     { label: 'Check Valve', icon: ShieldCheck, action: () => addNode('checkValve', { x: 350, y: 150 }), color: 'text-violet-600' },
+    { label: 'Turbine', icon: Settings2, action: () => addNode('turbine', { x: 400, y: 150 }), color: 'text-teal-600' },
   ];
 
   const handleRunWhamo = async (fileName?: string) => {

@@ -23,7 +23,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { cn } from '@/lib/utils';
 import { useNetworkStore, WhamoNode, WhamoEdge } from '@/lib/store';
-import { ReservoirNode, SimpleNode, JunctionNode, SurgeTankNode, FlowBoundaryNode, PumpNode, CheckValveNode } from '@/components/NetworkNode';
+import { ReservoirNode, SimpleNode, JunctionNode, SurgeTankNode, FlowBoundaryNode, PumpNode, CheckValveNode, TurbineNode } from '@/components/NetworkNode';
 import { ConnectionEdge } from '@/components/ConnectionEdge';
 import { PropertiesPanel } from '@/components/PropertiesPanel';
 import { NodeSelectionPanel } from '@/components/NodeSelectionPanel';
@@ -71,6 +71,7 @@ const nodeTypes = {
   flowBoundary: FlowBoundaryNode,
   pump: PumpNode,
   checkValve: CheckValveNode,
+  turbine: TurbineNode,
 };
 
 const edgeTypes = {
@@ -170,6 +171,7 @@ function DesignerInner() {
   };
 
   const handleSave = async () => {
+    const state = useNetworkStore.getState();
     const profiles = buildPipeProfiles(edges as WhamoEdge[]);
     const data = { 
       projectName,
@@ -179,6 +181,8 @@ function DesignerInner() {
       computationalParams,
       outputRequests,
       pcharData,
+      tcharData: state.tcharData,
+      vSchedules: state.vSchedules,
       snapshotTimes,
       hSchedules,
       qSchedules,
@@ -216,6 +220,7 @@ function DesignerInner() {
   };
 
   const handleSaveAs = async () => {
+    const state2 = useNetworkStore.getState();
     const profiles = buildPipeProfiles(edges as WhamoEdge[]);
     const data = { 
       projectName,
@@ -225,6 +230,8 @@ function DesignerInner() {
       computationalParams,
       outputRequests,
       pcharData,
+      tcharData: state2.tcharData,
+      vSchedules: state2.vSchedules,
       snapshotTimes,
       hSchedules,
       qSchedules,
@@ -513,17 +520,17 @@ function DesignerInner() {
           if (json.nodes && json.edges) {
             const loadedProjectName = json.projectName || file.name.replace(/\.json$/i, '');
             const expandedEdges = expandEdges(json.edges, json.pipeProfiles);
-            loadNetwork(json.nodes, expandedEdges, { ...json.computationalParams, qSchedules: json.qSchedules, hSchedules: json.hSchedules }, json.outputRequests, loadedProjectName, handle, json.pcharData, json.snapshotTimes, json.nodeSelectionSet);
+            loadNetwork(json.nodes, expandedEdges, { ...json.computationalParams, qSchedules: json.qSchedules, hSchedules: json.hSchedules }, json.outputRequests, loadedProjectName, handle, json.pcharData, json.snapshotTimes, json.nodeSelectionSet, json.tcharData, json.vSchedules);
             setProjectState("active");
             toast({ title: "Project Loaded", description: `Network topology "${loadedProjectName}" restored from JSON.` });
           } else {
             throw new Error("Invalid JSON format");
           }
         } else if (fileName.endsWith('.inp')) {
-          const { nodes, edges, projectName: parsedName, computationalParams: parsedParams, pcharData } = parseInpFile(content);
+          const { nodes, edges, projectName: parsedName, computationalParams: parsedParams, pcharData, tcharData, vSchedules } = parseInpFile(content);
           if (nodes.length > 0) {
             const loadedProjectName = parsedName || file.name.replace(/\.inp$/i, '');
-            loadNetwork(nodes, edges, parsedParams, undefined, loadedProjectName, handle, pcharData);
+            loadNetwork(nodes, edges, parsedParams, undefined, loadedProjectName, handle, pcharData, undefined, undefined, tcharData, vSchedules);
             setProjectState("active");
             toast({ title: "Project Loaded", description: `Network topology "${loadedProjectName}" restored from .inp file.` });
           } else {
@@ -555,17 +562,17 @@ function DesignerInner() {
             // Use project name from file or fallback to filename
             const loadedProjectName = json.projectName || file.name.replace(/\.json$/i, '');
             const expandedEdges = expandEdges(json.edges, json.pipeProfiles);
-            loadNetwork(json.nodes, expandedEdges, { ...json.computationalParams, qSchedules: json.qSchedules, hSchedules: json.hSchedules }, json.outputRequests, loadedProjectName, undefined, json.pcharData, json.snapshotTimes, json.nodeSelectionSet);
+            loadNetwork(json.nodes, expandedEdges, { ...json.computationalParams, qSchedules: json.qSchedules, hSchedules: json.hSchedules }, json.outputRequests, loadedProjectName, undefined, json.pcharData, json.snapshotTimes, json.nodeSelectionSet, json.tcharData, json.vSchedules);
             setProjectState("active");
             toast({ title: "Project Loaded", description: `Network topology "${loadedProjectName}" restored from JSON.` });
           } else {
             throw new Error("Invalid JSON format");
           }
         } else if (fileName.endsWith('.inp')) {
-          const { nodes, edges, projectName: parsedName, computationalParams: parsedParams, pcharData } = parseInpFile(content);
+          const { nodes, edges, projectName: parsedName, computationalParams: parsedParams, pcharData, tcharData, vSchedules } = parseInpFile(content);
           if (nodes.length > 0) {
             const loadedProjectName = parsedName || file.name.replace(/\.inp$/i, '');
-            loadNetwork(nodes, edges, parsedParams, undefined, loadedProjectName, undefined, pcharData);
+            loadNetwork(nodes, edges, parsedParams, undefined, loadedProjectName, undefined, pcharData, undefined, undefined, tcharData, vSchedules);
             setProjectState("active");
             toast({ title: "Project Loaded", description: `Network topology "${loadedProjectName}" restored from .inp file.` });
           } else {

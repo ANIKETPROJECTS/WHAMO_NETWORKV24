@@ -288,6 +288,67 @@ export const CheckValveNode = memo(({ id, data, selected }: NodeProps) => {
   );
 });
 
+// Turbine Node
+export const TurbineNode = memo(({ id, data, selected }: NodeProps) => {
+  const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
+  const displayData = node ? node.data : data;
+  const hasOrderError = useNodeOrderError(id);
+
+  return (
+    <TooltipWrapper content={<DataList data={displayData} title="Turbine Properties" />}>
+      <div className={clsx(
+        "w-[72px] h-[64px] transition-all group relative flex items-center justify-center",
+      )}>
+        <ErrorRing show={hasOrderError} />
+        <Handle type="target" id="t-top" position={Position.Top} className={clsx(HandleStyle, "!bg-teal-500")} />
+        <Handle type="source" id="s-top" position={Position.Top} className={clsx(HandleStyle, "!bg-teal-500")} />
+        <Handle type="target" id="t-bottom" position={Position.Bottom} className={clsx(HandleStyle, "!bg-teal-500")} />
+        <Handle type="source" id="s-bottom" position={Position.Bottom} className={clsx(HandleStyle, "!bg-teal-500")} />
+        <Handle type="target" id="t-left" position={Position.Left} className={clsx(HandleStyle, "!bg-teal-500")} />
+        <Handle type="source" id="s-left" position={Position.Left} className={clsx(HandleStyle, "!bg-teal-500")} />
+        <Handle type="target" id="t-right" position={Position.Right} className={clsx(HandleStyle, "!bg-teal-500")} />
+        <Handle type="source" id="s-right" position={Position.Right} className={clsx(HandleStyle, "!bg-teal-500")} />
+
+        {/* Francis Turbine Engineering Icon */}
+        <svg
+          width="72" height="64" viewBox="0 0 72 64" fill="none"
+          className={clsx("transition-all", selected ? "drop-shadow-[0_0_10px_rgba(20,184,166,0.9)]" : "")}
+        >
+          {/* Spiral casing / volute (outer ellipse) */}
+          <ellipse cx="36" cy="38" rx="28" ry="22" fill="#2dd4bf" stroke="#0d9488" strokeWidth="1.5"/>
+          {/* Spiral scroll cutaway — darker arc to suggest volute spiral */}
+          <path d="M36 16 A22 22 0 1 1 14 38" stroke="#0d9488" strokeWidth="3" fill="none"/>
+          {/* Penstock inlet nozzle — top */}
+          <rect x="30" y="2" width="12" height="16" rx="2" fill="#0d9488"/>
+          <rect x="28" y="14" width="16" height="4" rx="1" fill="#0f766e"/>
+          {/* Draft tube outlet — bottom */}
+          <rect x="28" y="58" width="16" height="4" rx="1" fill="#0f766e"/>
+          {/* Runner (inner wheel) */}
+          <circle cx="36" cy="38" r="14" fill="#14b8a6" stroke="#0d9488" strokeWidth="1.5"/>
+          {/* Runner blades (6 curved blades) */}
+          {[0,60,120,180,240,300].map((deg, i) => {
+            const rad = (deg * Math.PI) / 180;
+            const x1 = 36 + 5 * Math.cos(rad);
+            const y1 = 38 + 5 * Math.sin(rad);
+            const x2 = 36 + 12 * Math.cos(rad + 0.5);
+            const y2 = 38 + 12 * Math.sin(rad + 0.5);
+            return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0f766e" strokeWidth="2.5" strokeLinecap="round"/>;
+          })}
+          {/* Runner hub */}
+          <circle cx="36" cy="38" r="4.5" fill="#0d9488"/>
+          <circle cx="36" cy="38" r="2" fill="#0f766e"/>
+          {/* Generator shaft above casing */}
+          <rect x="32" y="2" width="8" height="6" rx="1" fill="#0d9488"/>
+        </svg>
+
+        <div className="absolute -top-6 text-[10px] font-bold text-teal-900 bg-white/80 px-1 rounded border border-teal-200 shadow-sm whitespace-nowrap">
+          {data.label as React.ReactNode}
+        </div>
+      </div>
+    </TooltipWrapper>
+  );
+});
+
 // Flow Boundary
 export const FlowBoundaryNode = memo(({ id, data, selected }: NodeProps) => {
   const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
