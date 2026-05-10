@@ -1101,6 +1101,7 @@ export function FlexTable({ open, onClose }: FlexTableProps) {
     flowBoundary: allRows.filter(r => r.subType === 'flowBoundary').length,
     pump:         allRows.filter(r => r.subType === 'pump').length,
     checkValve:   allRows.filter(r => r.subType === 'checkValve').length,
+    turbine:      allRows.filter(r => r.subType === 'turbine').length,
   }), [allRows]);
 
   const handleChangeEdge = useCallback((id: string, field: string, rawStr: string, currentData: any) => {

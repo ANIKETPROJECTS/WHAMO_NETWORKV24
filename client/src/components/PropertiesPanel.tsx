@@ -1,6 +1,7 @@
 import { useState, useEffect, type ComponentProps } from 'react';
 import { useNetworkStore, type UnitSystem, type PcharType, type TcharType } from '@/lib/store';
 import { PIPE_MATERIALS, PIPE_MATERIALS_BY_ID } from '@/lib/pipe-materials';
+import { TurbineCurvePanel } from '@/components/TurbineCurvePanel';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -1244,6 +1245,13 @@ export function PropertiesPanel() {
                 })()}
 
                 <TcharEditor tType={tType} activeTc={activeTc} updateTcharData={updateTcharData} />
+
+                <TurbineCurvePanel
+                  tType={tType}
+                  activeTc={activeTc}
+                  updateTcharData={updateTcharData}
+                  designHead={typeof formData.designHead === 'number' ? formData.designHead : undefined}
+                />
               </>
             );
           })()}

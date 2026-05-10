@@ -1,0 +1,307 @@
+I already implemented the Turbine module in my WHAMO-style hydraulic transient simulation project.
+
+DO NOT modify or break the existing turbine architecture, turbine variables, export logic, validation logic, or current UI behavior unless absolutely necessary.
+
+The goal is ONLY to extend the current turbine system with:
+
+Turbine Hill Chart / Curve Library
+Specific Speed (Ns) selection
+Automatic TCHAR curve population
+Curve visualization/preview
+Optional TCHAR auto-generation
+
+This is an enhancement layer on top of the existing turbine implementation.
+
+IMPORTANT CONSTRAINTS
+DO NOT CHANGE
+
+The following existing turbine concepts must remain fully compatible:
+
+Existing turbine object schema
+Existing .INP export structure
+Existing TURBINE block generation
+Existing OPTURB generation
+Existing TCHAR storage
+Existing turbine property panel layout
+Existing variable names
+Existing validation rules
+Existing schedule logic
+Existing import/export parser
+
+Only ADD new functionality.
+
+OBJECTIVE
+
+Integrate the uploaded turbine hill chart library data into the turbine module.
+
+The uploaded library contains:
+
+Specific Speed groups (Ns)
+Multiple Gate openings
+Head / Q / Torque coefficient curves
+Real turbine performance data
+
+This should enhance TCHAR generation instead of manually entering all Q/Efficiency values.
+
+UNDERSTAND THE DATA FORMAT
+
+The uploaded file structure is:
+
+SPECIFIC SPEED (US/SI): 30 / 115
+NUMGATES: 9
+
+GATE: 20.00
+HEAD Q TORQUE
+
+GATE: 30.00
+HEAD Q TORQUE
+...
+
+Each block contains:
+
+Column	Meaning
+HEAD	Normalized head
+Q	Flow
+TORQUE	Torque coefficient / power coefficient
+
+The library replaces manually typed TCHAR matrices with real hill-chart-based turbine curves.
+
+REQUIRED FEATURE ADDITIONS
+1. Add "Specific Speed (Ns)" Selection
+
+Inside the existing Turbine Properties Panel:
+
+Add a new optional section:
+
+Performance Curves
+
+Add dropdown:
+
+Specific Speed (Ns)
+
+Available options from library:
+
+Ns 30 (US) / 115 SI
+Ns 45 (US) / 170 SI
+Ns 60 (US) / 230 SI
+
+Store only selected curve reference.
+
+DO NOT replace existing TYPE variable.
+
+This is an enhancement only.
+
+2. Parse Uploaded Curve Library
+
+Create parser utility for the uploaded predefined turbine curve file.
+
+The parser must extract:
+
+{
+  nsGroup: number,
+  gates: [
+    {
+      gatePercent: number,
+      points: [
+        {
+          head: number,
+          q: number,
+          torqueCoeff: number
+        }
+      ]
+    }
+  ]
+}
+
+Store globally in application state/store.
+
+DO NOT attach full curve data inside each turbine element.
+
+3. Add Curve Preview UI
+
+Inside turbine panel:
+
+Add lightweight visualization section.
+
+Requirements:
+
+Show selected Ns curve set
+Preview gate curves
+Allow selecting gate %
+Plot:
+Head vs Q
+Head vs Torque
+
+Use existing chart library already installed in project.
+
+DO NOT install heavy new chart dependencies if charts already exist.
+
+Keep UI minimal and professional.
+
+4. TCHAR Auto Population
+
+Add button:
+
+Generate TCHAR From Curves
+
+Behavior:
+
+Uses selected Ns group
+Uses turbine design head
+Uses selected gate ranges
+Converts normalized curve data into TCHAR format
+
+Auto-fill:
+
+HEAD row
+Q matrix
+EFFICIENCY matrix
+
+DO NOT overwrite manually entered values unless user confirms.
+
+5. Efficiency Calculation
+
+Library provides:
+
+HEAD / Q / TORQUE_COEFF
+
+But .INP requires:
+
+EFFICIENCY
+
+Add conversion utility:
+
+η = Pout / (γ * Q * H)
+
+Generate efficiency values from torque/power coefficients.
+
+Clamp efficiency values between:
+
+0.0 → 1.0
+6. Design Head Scaling
+
+The library is normalized around:
+
+H = 100
+Q = 100
+
+My system uses actual net head (~50 ft).
+
+Implement scaling utility:
+
+scaledQ = normalizedQ * scaleFactor
+scaledHead = normalizedHead * designHeadFactor
+
+Allow configurable scaling based on turbine design head.
+
+DO NOT alter existing hydraulic equations elsewhere.
+
+7. Add Smart Ns Recommendation
+
+Optional helper:
+
+Based on turbine head:
+
+Recommend:
+
+Head Range	Suggested Ns
+Low-medium head	Ns 30
+Medium	Ns 45
+High-flow compact	Ns 60
+
+This is only UI guidance.
+
+DO NOT auto-change values.
+
+8. TCHAR Generator Output
+
+Add preview/export button:
+
+Preview TCHAR Block
+
+Generate formatted output like:
+
+TCHAR TYPE 1
+ GATE 20. 40. 60. 80. 100.
+ HEAD 60. 50. 40. 30. 20.
+ Q
+   ...
+ EFFICIENCY
+   ...
+FINISH
+
+This must remain fully compatible with existing .INP export logic.
+
+9. Preserve Existing Architecture
+
+Very Important:
+
+Do NOT rewrite turbine module.
+
+Instead:
+
+Extend existing turbine panel
+Extend existing TCHAR utilities
+Add helper services/utilities
+Add optional curve visualization layer
+
+The current turbine workflow must continue working even if curve library is never used.
+
+10. Suggested New Files
+
+Only if necessary:
+
+src/utils/turbineCurveParser.ts
+src/utils/tcharGenerator.ts
+src/utils/turbineScaling.ts
+src/store/turbineCurveStore.ts
+src/components/turbine/TurbineCurvePanel.tsx
+src/components/turbine/TurbineCurveChart.tsx
+
+Avoid large refactors.
+
+11. Suggested Existing Files to Extend
+
+Likely files:
+
+TurbinePropertiesPanel.tsx
+turbineExport.ts
+tcharStore.ts
+inpGenerator.ts
+
+Modify minimally.
+
+12. UI Requirements
+
+UI must:
+
+Match existing project design
+Be compact
+Be responsive
+Avoid clutter
+Use collapsible sections
+Support dark mode if existing project supports it
+13. Expected Workflow
+
+User flow should be:
+
+Select Turbine
+Choose Ns Group
+Preview Curves
+Select gate range
+Click Generate TCHAR
+TCHAR auto-populates
+Existing export system generates .INP
+14. Deliverables
+
+At completion provide:
+
+Files modified
+New files added
+Data structure used for curve library
+Parser explanation
+TCHAR generation logic
+Scaling logic
+Efficiency conversion method
+Example generated TCHAR block
+Confirmation existing turbine logic was preserved
