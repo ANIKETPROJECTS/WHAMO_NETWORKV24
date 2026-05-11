@@ -123,8 +123,12 @@ function DesignerInner() {
     setLoadedFileHandle,
     setAllNodesSelected,
     addNode,
+    addEdgeElement,
     nodeSelectionSet,
   } = useNetworkStore();
+
+  const [activeLinkTool, setActiveLinkTool] = useState<'pump' | 'checkValve' | 'turbine' | null>(null);
+  const [linkSourceNodeId, setLinkSourceNodeId] = useState<string | null>(null);
 
   // Fields that live in a pipe profile (shared across same-label edges)
   const PIPE_PROFILE_FIELDS = [
@@ -434,8 +438,22 @@ function DesignerInner() {
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (activeLinkTool) {
+      if (!linkSourceNodeId) {
+        setLinkSourceNodeId(node.id);
+      } else {
+        if (linkSourceNodeId === node.id) {
+          toast({ variant: 'destructive', title: 'Invalid Connection', description: 'Cannot connect an element to itself.' });
+          return;
+        }
+        addEdgeElement(activeLinkTool, linkSourceNodeId, node.id);
+        setLinkSourceNodeId(null);
+        setActiveLinkTool(null);
+      }
+      return;
+    }
     selectElement(node.id, 'node');
-  }, [selectElement]);
+  }, [selectElement, activeLinkTool, linkSourceNodeId, addEdgeElement, toast]);
 
   const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
     selectElement(edge.id, 'edge');
@@ -452,7 +470,16 @@ function DesignerInner() {
   }, [selectElement]);
 
   useEffect(() => {
+    if (!activeLinkTool) setLinkSourceNodeId(null);
+  }, [activeLinkTool]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && activeLinkTool) {
+        setActiveLinkTool(null);
+        setLinkSourceNodeId(null);
+        return;
+      }
       // Check if user is typing in an input
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
@@ -850,6 +877,8 @@ function DesignerInner() {
           setShowDiagram(true);
         }}
         onVisualization={handleVisualizationClick}
+        activeLinkTool={activeLinkTool}
+        onSetLinkTool={setActiveLinkTool}
       />
 
       {/* Simulation running overlay */}
@@ -918,27 +947,47 @@ function DesignerInner() {
             <div className="flex h-full w-full overflow-hidden relative">
               {/* Canvas Area */}
               <div className="flex-1 relative h-full bg-slate-50 transition-all duration-300">
+                {activeLinkTool && (
+                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-full shadow-lg text-white text-sm font-medium"
+                      style={{
+                        background: activeLinkTool === 'pump' ? '#f97316'
+                          : activeLinkTool === 'checkValve' ? '#8b5cf6'
+                          : '#14b8a6'
+                      }}
+                    >
+                      <span>
+                        {activeLinkTool === 'pump' ? '🔄 Pump' : activeLinkTool === 'checkValve' ? '🛡 Check Valve' : '⚙ Turbine'}
+                      </span>
+                      <span className="opacity-80">—</span>
+                      <span>
+                        {linkSourceNodeId ? 'Now click the downstream node' : 'Click the upstream node'}
+                      </span>
+                      <span className="opacity-60 text-xs ml-1">(Esc to cancel)</span>
+                    </div>
+                  </div>
+                )}
                 <ReactFlow
                   nodes={nodes as any}
                   edges={edges as any}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
-                  onConnect={onConnect}
-                  onConnectEnd={onConnectEnd}
+                  onConnect={activeLinkTool ? undefined : onConnect}
+                  onConnectEnd={activeLinkTool ? undefined : onConnectEnd}
                   isValidConnection={isValidConnection}
                   nodeTypes={nodeTypes}
                   edgeTypes={edgeTypes}
                   onNodeClick={onNodeClick}
                   onEdgeClick={onEdgeClick}
                   onSelectionChange={onSelectionChange as any}
-                  onPaneClick={() => setShowNodeSelection(false)}
+                  onPaneClick={() => { setShowNodeSelection(false); if (activeLinkTool) { setActiveLinkTool(null); setLinkSourceNodeId(null); } }}
                   fitView
                   minZoom={0.05}
                   maxZoom={4}
-                  className="bg-slate-50"
+                  className={cn("bg-slate-50", activeLinkTool && "cursor-crosshair")}
                   proOptions={{ hideAttribution: true }}
-                  nodesDraggable={!isLocked}
-                  nodesConnectable={!isLocked}
+                  nodesDraggable={!isLocked && !activeLinkTool}
+                  nodesConnectable={!isLocked && !activeLinkTool}
                   elementsSelectable={true}
                 >
                   <Background color="#94a3b8" gap={20} size={1} className={cn(!showGrid && "opacity-0")} />

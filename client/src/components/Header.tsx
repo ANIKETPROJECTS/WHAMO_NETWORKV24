@@ -81,6 +81,8 @@ interface HeaderProps {
   onLoad: () => void;
   onShowDiagram?: () => void;
   onVisualization?: () => void;
+  activeLinkTool?: 'pump' | 'checkValve' | 'turbine' | null;
+  onSetLinkTool?: (tool: 'pump' | 'checkValve' | 'turbine' | null) => void;
 }
 
 export function Header({
@@ -92,6 +94,8 @@ export function Header({
   onLoad,
   onShowDiagram,
   onVisualization,
+  activeLinkTool,
+  onSetLinkTool,
 }: HeaderProps) {
   const { toast } = useToast();
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -486,22 +490,28 @@ export function Header({
                   BC
                 </MenubarItem>
                 <MenubarItem
-                  onClick={() => addNode("pump", { x: 200, y: 200 })}
+                  onClick={() => onSetLinkTool ? onSetLinkTool(activeLinkTool === 'pump' ? null : 'pump') : addNode("pump", { x: 200, y: 200 })}
                   className="gap-2"
+                  data-testid="menu-insert-pump"
                 >
-                  <PlayCircle className="w-4 h-4 text-orange-500" /> Pump
+                  <PlayCircle className={`w-4 h-4 ${activeLinkTool === 'pump' ? 'text-orange-600' : 'text-orange-500'}`} />
+                  Pump {activeLinkTool === 'pump' ? '(active — click nodes)' : ''}
                 </MenubarItem>
                 <MenubarItem
-                  onClick={() => addNode("checkValve", { x: 200, y: 250 })}
+                  onClick={() => onSetLinkTool ? onSetLinkTool(activeLinkTool === 'checkValve' ? null : 'checkValve') : addNode("checkValve", { x: 200, y: 250 })}
                   className="gap-2"
+                  data-testid="menu-insert-checkvalve"
                 >
-                  <ShieldCheck className="w-4 h-4 text-violet-600" /> Check Valve
+                  <ShieldCheck className={`w-4 h-4 ${activeLinkTool === 'checkValve' ? 'text-violet-800' : 'text-violet-600'}`} />
+                  Check Valve {activeLinkTool === 'checkValve' ? '(active — click nodes)' : ''}
                 </MenubarItem>
                 <MenubarItem
-                  onClick={() => addNode("turbine", { x: 200, y: 300 })}
+                  onClick={() => onSetLinkTool ? onSetLinkTool(activeLinkTool === 'turbine' ? null : 'turbine') : addNode("turbine", { x: 200, y: 300 })}
                   className="gap-2"
+                  data-testid="menu-insert-turbine"
                 >
-                  <Settings2 className="w-4 h-4 text-teal-600" /> Turbine
+                  <Settings2 className={`w-4 h-4 ${activeLinkTool === 'turbine' ? 'text-teal-800' : 'text-teal-600'}`} />
+                  Turbine {activeLinkTool === 'turbine' ? '(active — click nodes)' : ''}
                 </MenubarItem>
               </MenubarContent>
             </MenubarMenu>

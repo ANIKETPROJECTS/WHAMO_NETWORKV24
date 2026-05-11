@@ -79,7 +79,7 @@ export const flowBoundaryPropsSchema = z.object({
 });
 
 // Link/Conduit Types
-export const linkTypeSchema = z.enum(["conduit", "dummy"]);
+export const linkTypeSchema = z.enum(["conduit", "dummy", "pump", "checkValve", "turbine"]);
 export type LinkType = z.infer<typeof linkTypeSchema>;
 
 export const conduitPropsSchema = z.object({

@@ -66,6 +66,7 @@ interface EdgeData extends Record<string, unknown> {
   label: string;
   type: LinkType;
   unit?: UnitSystem;
+  // Conduit / dummy pipe fields
   length?: number | string;
   diameter?: number | string;
   celerity?: number | string;
@@ -81,6 +82,25 @@ interface EdgeData extends Record<string, unknown> {
   d?: number | string;
   a?: number | string;
   _unitCache?: UnitCache;
+  // Pump element-edge fields
+  pumpStatus?: string;
+  pumpType?: number;
+  rq?: number | string;
+  rhead?: number | string;
+  rspeed?: number | string;
+  rtorque?: number | string;
+  wr2?: number | string;
+  // CheckValve element-edge fields
+  valveStatus?: string;
+  valveDiam?: number | string;
+  // Turbine element-edge fields
+  turbineType?: number;
+  syncSpeed?: number | string;
+  turbFriction?: number | string;
+  windage?: number | string;
+  operationMode?: string;
+  vScheduleNumber?: number;
+  designHead?: number | string;
 }
 
 export type WhamoNode = Node<NodeData>;
@@ -139,6 +159,7 @@ interface NetworkState {
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
   addNode: (type: NodeType, position: { x: number; y: number }) => void;
+  addEdgeElement: (type: 'pump' | 'checkValve' | 'turbine', sourceId: string, targetId: string) => void;
   updateNodeData: (id: string, data: Partial<NodeData>) => void;
   updateEdgeData: (id: string, data: Partial<EdgeData>) => void;
   deleteElement: (id: string, type: 'node' | 'edge') => void;
@@ -849,6 +870,93 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
       }
     });
     
+    set({ outputRequests: [...get().outputRequests, ...newRequests] });
+  },
+
+  addEdgeElement: (type, sourceId, targetId) => {
+    get().saveToHistory();
+    const id = getId();
+    const state = get();
+
+    let initialData: EdgeData;
+
+    if (type === 'pump') {
+      const pumpCount = state.edges.filter(e => e.data?.type === 'pump').length
+        + state.nodes.filter(n => n.type === 'pump').length + 1;
+      const existingTypes = Object.keys(state.pcharData).map(Number);
+      const newPumpType = existingTypes.length > 0 ? Math.max(...existingTypes) + 1 : 1;
+      initialData = {
+        label: `P${pumpCount}`,
+        type: 'pump',
+        pumpStatus: 'ACTIVE',
+        pumpType: newPumpType,
+        rq: 0,
+        rhead: 0,
+        rspeed: 0,
+        rtorque: 0,
+        wr2: 0,
+      };
+      const defaultPchar: PcharType = { sratio: [], qratio: [], hratio: [], tratio: [] };
+      set({ pcharData: { ...state.pcharData, [newPumpType]: defaultPchar } });
+    } else if (type === 'checkValve') {
+      const cvCount = state.edges.filter(e => e.data?.type === 'checkValve').length
+        + state.nodes.filter(n => n.type === 'checkValve').length + 1;
+      initialData = {
+        label: `VC${cvCount}`,
+        type: 'checkValve',
+        valveStatus: 'OPEN',
+      };
+    } else {
+      const turbCount = state.edges.filter(e => e.data?.type === 'turbine').length
+        + state.nodes.filter(n => n.type === 'turbine').length + 1;
+      const existingTcharTypes = Object.keys(state.tcharData).map(Number);
+      const newTcharType = existingTcharTypes.length > 0 ? Math.max(...existingTcharTypes) + 1 : 1;
+      initialData = {
+        label: `T${turbCount}`,
+        type: 'turbine',
+        turbineType: newTcharType,
+        syncSpeed: 0,
+        wr2: 0,
+        turbFriction: 0,
+        windage: 0,
+        operationMode: 'TURBINE',
+        vScheduleNumber: 1,
+      };
+      if (!state.tcharData[newTcharType]) {
+        const defaultTchar: TcharType = { gate: [], head: [], qMatrix: [], effMatrix: [] };
+        set({ tcharData: { ...get().tcharData, [newTcharType]: defaultTchar } });
+      }
+    }
+
+    const strokeColor = type === 'pump' ? '#f97316'
+      : type === 'checkValve' ? '#8b5cf6'
+      : '#14b8a6';
+
+    const newEdge: WhamoEdge = {
+      id,
+      source: sourceId,
+      target: targetId,
+      type: 'connection',
+      style: { stroke: strokeColor, strokeWidth: 2.5 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: strokeColor,
+      },
+      data: initialData,
+    };
+
+    set({ edges: [...get().edges, newEdge] });
+
+    const availableVars = ['Q', 'HEAD', 'ELEV', 'VEL', 'PRESS', 'PIEZHEAD'];
+    const requestTypes: ('HISTORY' | 'PLOT' | 'SPREADSHEET')[] = ['HISTORY', 'PLOT', 'SPREADSHEET'];
+    const newRequests: OutputRequest[] = requestTypes.map(reqType => ({
+      id: `req-${Date.now()}-${Math.random()}`,
+      elementId: id,
+      elementType: 'edge',
+      isElement: true,
+      requestType: reqType,
+      variables: [...availableVars],
+    }));
     set({ outputRequests: [...get().outputRequests, ...newRequests] });
   },
 

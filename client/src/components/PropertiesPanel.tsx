@@ -669,7 +669,7 @@ export function PropertiesPanel() {
         <div className="space-y-4">
           <h4 className="text-sm font-semibold text-foreground/80">Parameters</h4>
           
-          {!isNode && (
+          {!isNode && (formData.type === 'conduit' || formData.type === 'dummy' || !formData.type) && (
             <div className="grid gap-2 mb-4">
               <Label>Connection Type</Label>
               <RadioGroup 
@@ -974,7 +974,7 @@ export function PropertiesPanel() {
             </>
           )}
 
-          {isNode && element.data?.type === 'pump' && (() => {
+          {element.data?.type === 'pump' && (() => {
             const pType = Number(formData.pumpType ?? 1);
             const pc: PcharType | undefined = pcharData[pType];
             const defaultPchar: PcharType = {
@@ -1111,7 +1111,7 @@ export function PropertiesPanel() {
             );
           })()}
 
-          {isNode && element.data?.type === 'turbine' && (() => {
+          {element.data?.type === 'turbine' && (() => {
             const tType = Number(formData.turbineType ?? 1);
             const activeTc: TcharType = tcharData[tType] || { gate: [], head: [], qMatrix: [], effMatrix: [] };
             const tcharTypeOptions = Object.keys(tcharData).map(Number).sort((a, b) => a - b)
@@ -1256,7 +1256,7 @@ export function PropertiesPanel() {
             );
           })()}
 
-          {isNode && element.data?.type === 'checkValve' && (
+          {element.data?.type === 'checkValve' && (
             <>
               <div className="grid gap-2">
                 <Label htmlFor="valveStatus">Valve Status</Label>

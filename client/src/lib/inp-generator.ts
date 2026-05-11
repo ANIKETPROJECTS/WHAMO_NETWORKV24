@@ -375,6 +375,20 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
     addL(`ONEWAY ID ${label} DIAM ${diam} FINISH`);
     addL('');
   });
+  edges.filter(e => e.data?.type === 'checkValve').forEach(e => {
+    const d = e.data;
+    if (!d) return;
+    const label = d.label as string;
+    if (exportedValveLabels.has(label)) return;
+    exportedValveLabels.add(label);
+    const unit = (d.unit || globalUnit) as 'SI' | 'FPS';
+    addComment(d.comment as string | undefined);
+    const diam = d.valveDiam !== undefined && Number(d.valveDiam) !== 0
+      ? toFPS(Number(d.valveDiam), unit, 'diameter')
+      : '0';
+    addL(`ONEWAY ID ${label} DIAM ${diam} FINISH`);
+    addL('');
+  });
 
   const exportedPumpLabels = new Set<string>();
   nodes.filter(n => n.type === 'pump').forEach(n => {
@@ -394,6 +408,23 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
     addL(` WR2 ${wr2} FINISH`);
     addL('');
   });
+  edges.filter(e => e.data?.type === 'pump').forEach(e => {
+    const d = e.data;
+    if (!d) return;
+    const label = d.label as string;
+    if (exportedPumpLabels.has(label)) return;
+    exportedPumpLabels.add(label);
+    addComment(d.comment as string | undefined);
+    const pType = d.pumpType ?? 1;
+    const rq = Number(d.rq ?? 0);
+    const rhead = Number(d.rhead ?? 0);
+    const rspeed = Number(d.rspeed ?? 0);
+    const rtorque = Number(d.rtorque ?? 0);
+    const wr2 = Number(d.wr2 ?? 0);
+    addL(`PUMP ID ${label} TYPE ${pType} RQ ${rq} RHEAD ${rhead} RSPEED ${rspeed} RTOROUE ${rtorque}`);
+    addL(` WR2 ${wr2} FINISH`);
+    addL('');
+  });
 
   const exportedTurbineLabels = new Set<string>();
   nodes.filter(n => n.type === 'turbine').forEach(n => {
@@ -403,6 +434,22 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
     if (exportedTurbineLabels.has(label)) return;
     exportedTurbineLabels.add(label);
     addComment(d.comment);
+    const tType = d.turbineType ?? 1;
+    const rspeed = Number(d.syncSpeed ?? 0);
+    const wr2 = Number(d.wr2 ?? 0);
+    const friction = Number(d.turbFriction ?? 0);
+    const windage = Number(d.windage ?? 0);
+    addL(`TURBINE ID ${label} TYPE ${tType} RSPEED ${rspeed} WR2 ${wr2}`);
+    addL(` FRICTION ${friction} WINDAGE ${windage} FINISH`);
+    addL('');
+  });
+  edges.filter(e => e.data?.type === 'turbine').forEach(e => {
+    const d = e.data;
+    if (!d) return;
+    const label = d.label as string;
+    if (exportedTurbineLabels.has(label)) return;
+    exportedTurbineLabels.add(label);
+    addComment(d.comment as string | undefined);
     const tType = d.turbineType ?? 1;
     const rspeed = Number(d.syncSpeed ?? 0);
     const wr2 = Number(d.wr2 ?? 0);
@@ -462,28 +509,35 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
     addL('');
   });
 
-  // OPPUMP for active pumps
-  const activePumps = nodes.filter(n => n.type === 'pump' && n.data?.pumpStatus !== 'INACTIVE');
+  // OPPUMP for active pumps (nodes and element-edges)
   const seenOppump = new Set<string>();
-  activePumps.forEach(n => {
-    const label = n.data?.label;
+  const allPumps = [
+    ...nodes.filter(n => n.type === 'pump' && n.data?.pumpStatus !== 'INACTIVE'),
+    ...edges.filter(e => e.data?.type === 'pump' && (e.data as any)?.pumpStatus !== 'INACTIVE'),
+  ];
+  allPumps.forEach(el => {
+    const label = el.data?.label as string;
     if (!label || seenOppump.has(label)) return;
     seenOppump.add(label);
     addL(`OPPUMP ID ${label} PUMP FINISH`);
     addL('');
   });
 
-  // OPTURB for turbines
+  // OPTURB for turbines (nodes and element-edges)
   const seenOpturb = new Set<string>();
-  nodes.filter(n => n.type === 'turbine').forEach(n => {
-    const d = n.data;
+  const allTurbines = [
+    ...nodes.filter(n => n.type === 'turbine'),
+    ...edges.filter(e => e.data?.type === 'turbine'),
+  ];
+  allTurbines.forEach(el => {
+    const d = el.data;
     if (!d) return;
-    const label = d.label;
+    const label = d.label as string;
     if (!label || seenOpturb.has(label)) return;
     seenOpturb.add(label);
     const mode = (d.operationMode as string) || 'TURBINE';
     if (mode === 'TURBGOV' || mode === 'EMERGENCY') {
-      const schedNum = d.vScheduleNumber ?? 1;
+      const schedNum = (d.vScheduleNumber as number) ?? 1;
       addL(`OPTURB ID ${label} ${mode} ${schedNum} FINISH`);
     } else {
       addL(`OPTURB ID ${label} TURBINE FINISH`);
@@ -494,10 +548,10 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
   // VSCHEDULE blocks for turbines with TURBGOV/EMERGENCY modes
   const vSchedules = state.vSchedules || {};
   const usedVScheduleNums = new Set<number>();
-  nodes.filter(n => n.type === 'turbine').forEach(n => {
-    const mode = (n.data?.operationMode as string) || 'TURBINE';
+  allTurbines.forEach(el => {
+    const mode = (el.data?.operationMode as string) || 'TURBINE';
     if (mode === 'TURBGOV' || mode === 'EMERGENCY') {
-      const num = Number(n.data?.vScheduleNumber ?? 1);
+      const num = Number((el.data as any)?.vScheduleNumber ?? 1);
       if (!isNaN(num)) usedVScheduleNums.add(num);
     }
   });
@@ -593,9 +647,15 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[], autoDown
         const element = req.elementType === 'node' 
           ? nodes.find(n => n.id === req.elementId)
           : edges.find(e => e.id === req.elementId);
-        
+
+        const edgeElemType = req.elementType === 'edge' ? (element?.data?.type as string) : null;
+        const isElementEdge = edgeElemType === 'pump' || edgeElemType === 'checkValve' || edgeElemType === 'turbine';
+        if (isElementEdge) {
+          addL(` ELEM ${element?.data?.label || req.elementId} ${req.variables.join(' ')}`);
+          return;
+        }
+
         const isSpecialElem = req.elementType === 'node' && (element?.data?.type === 'surgeTank' || element?.data?.type === 'pump' || element?.data?.type === 'checkValve' || element?.type === 'surgeTank' || element?.type === 'pump' || element?.type === 'checkValve');
-        const isSurgeTank = isSpecialElem;
         const useElementRequest = isSpecialElem && req.isElement;
         
         const label = useElementRequest 
