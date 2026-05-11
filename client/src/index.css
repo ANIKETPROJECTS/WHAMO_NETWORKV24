@@ -104,6 +104,11 @@
 .react-flow__handle {
   @apply w-2 h-2 bg-primary border-2 border-background;
 }
+/* Hide handles while a pump/valve/turbine link tool is active so clicks land on the node body */
+.link-mode-active .react-flow__handle {
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
 .react-flow__controls {
   @apply shadow-lg border border-border/50 rounded-lg overflow-hidden bg-card;
 }

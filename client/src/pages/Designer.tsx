@@ -947,7 +947,7 @@ function DesignerInner() {
           <ResizablePanel defaultSize={75} minSize={isMaximized ? 0 : 30} className={cn(isMaximized && "hidden")}>
             <div className="flex h-full w-full overflow-hidden relative">
               {/* Canvas Area */}
-              <div className="flex-1 relative h-full bg-slate-50 transition-all duration-300">
+              <div className={cn("flex-1 relative h-full bg-slate-50 transition-all duration-300", activeLinkTool && "link-mode-active")}>
                 {activeLinkTool && (
                   <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
                     <div className="flex items-center gap-2 px-4 py-2 rounded-full shadow-lg text-white text-sm font-medium"
