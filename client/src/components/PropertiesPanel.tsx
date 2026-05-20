@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Trash2, ChevronDown, ChevronRight, Plus, CheckCircle2, Save } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronRight, Plus, CheckCircle2, Save, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getNodeSequenceViolations } from '@/lib/validator';
 
@@ -409,14 +409,7 @@ export function PropertiesPanel() {
       duplicates.forEach(e => updateEdgeData(e.id, processedData));
 
       setIsDirty(false);
-      if (duplicates.length > 0) {
-        toast({
-          title: "Duplicate Conduit Label",
-          description: `Label "${currentLabel}" is already used by ${duplicates.length === 1 ? '1 other conduit' : `${duplicates.length} other conduits`}. Saved anyway.`,
-        });
-      } else {
-        toast({ variant: "success", title: "Saved", description: "Changes saved successfully." });
-      }
+      toast({ variant: "success", title: "Saved", description: "Changes saved successfully." });
       return;
     }
 
@@ -685,12 +678,17 @@ export function PropertiesPanel() {
             {!isNode && (() => {
               const lbl = (formData.label as string) || '';
               const others = edges.filter(e => e.id !== selectedElementId && (e.data?.label as string) === lbl && (e.data?.type === 'conduit' || e.data?.type === 'dummy'));
-              return others.length > 0 && !profileApplied ? (
-                <p className="text-[10px] text-blue-600 flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Profile auto-applied from existing &quot;{lbl}&quot;
-                </p>
-              ) : null;
+              if (others.length > 0) {
+                return (
+                  <div className="rounded-md bg-amber-50 border border-amber-300 px-2.5 py-1.5 flex items-start gap-1.5" data-testid="warning-duplicate-label">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-[10px] text-amber-700 leading-snug">
+                      Label &quot;{lbl}&quot; is already used by {others.length === 1 ? '1 other conduit' : `${others.length} other conduits`}.
+                    </p>
+                  </div>
+                );
+              }
+              return null;
             })()}
             {profileApplied && (
               <p className="text-[10px] text-green-600 flex items-center gap-1" data-testid="text-profile-applied">
