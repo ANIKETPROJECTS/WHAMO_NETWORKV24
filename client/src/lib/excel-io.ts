@@ -294,11 +294,18 @@ function getRowValue(
   // BC Mode: translate stored 'fixed'/'schedule' → display label for Excel dropdown
   if (col.key === 'mode') return modeToDisplay(data.mode);
 
+  // Reservoir H Schedule: hScheduleNumber defaults to 1 and is always numeric
+  if (col.key === 'hScheduleNumber') {
+    if (data.mode !== 'schedule') return 'NA';
+    return Number(data.hScheduleNumber ?? 1);
+  }
+
   // T/H Pairs (reservoir H Schedule mode) — editable format: "time:head; time:head; ..."
   if (col.key === '_thPairs') {
-    if (modeToDisplay(data.mode) !== 'H Schedule') return 'NA';
-    const schedNum = data.hScheduleNumber ?? 1;
-    const sched = hSchedules?.find(s => s.number === schedNum);
+    if (data.mode !== 'schedule') return 'NA';
+    // Coerce to number to handle string-stored values from FlexTable text inputs
+    const schedNum = Number(data.hScheduleNumber ?? 1);
+    const sched = hSchedules?.find(s => Number(s.number) === schedNum);
     if (!sched || sched.points.length === 0) return '';
     return sched.points.map(p => `${p.time}:${p.head}`).join('; ');
   }
@@ -591,6 +598,39 @@ export async function exportTabToExcel(
               formulae: [`$${modeCol}3="Fixed Elevation"`], style: lockedStyle },
           ],
         });
+      }
+
+      // H Sched # dropdown: list of available schedule numbers (from hSchedules)
+      // Stored in _Lists sheet so it's referenceable by formula
+      if (hSchedIdx >= 0 && hSchedules && hSchedules.length > 0) {
+        const schedNums = hSchedules.map(s => s.number);
+        // Write schedule numbers to _Lists sheet in a dedicated column
+        const listsSheet = wb.getWorksheet('_Lists');
+        if (listsSheet) {
+          // Find the next free column in _Lists
+          const usedCols = listsSheet.columnCount || 0;
+          const schedCol = String.fromCharCode(65 + usedCols); // next column after existing ones
+          listsSheet.getCell(`${schedCol}1`).value = '_hSchedNums';
+          schedNums.forEach((num, r) => {
+            listsSheet.getCell(`${schedCol}${r + 2}`).value = num;
+          });
+          const schedListRange = `_Lists!$${schedCol}$2:$${schedCol}$${schedNums.length + 1}`;
+          // Apply dropdown validation only to H Schedule rows for H Sched # column
+          for (let r = 3; r <= maxDataRow; r++) {
+            const cell = ws.getCell(`${excelColLetter(hSchedIdx)}${r}`);
+            const rowData = rows[r - 3];
+            if (rowData?.data?.mode === 'schedule') {
+              cell.dataValidation = {
+                type: 'list',
+                allowBlank: false,
+                formulae: [schedListRange],
+                error: 'Please select a valid H Schedule number.',
+                errorTitle: 'Invalid Schedule',
+                showErrorMessage: true,
+              };
+            }
+          }
+        }
       }
     }
   }
