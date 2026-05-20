@@ -483,12 +483,18 @@ export async function exportTabToExcel(
         ? { ...CELL_BORDER, right: { style: 'medium', color: { argb: 'FF1A73E8' } } }
         : CELL_BORDER;
 
-      // ── Data validation — only on cells that are actually editable ──
-      if (isCondLocked || isReadOnly) {
-        // No validation on locked cells — they show "NA" and shouldn't be edited
+      // ── Data validation ──
+      // Truly read-only cells (e.g. row # and computed fields): hard-lock, no validation
+      if (isReadOnly) {
         if (!isRowNum) cell.protection = { locked: true };
         return;
       }
+
+      // Conditionally locked cells (depend on BC Mode): leave accessible so that
+      // changing the BC Mode dropdown in Excel immediately reveals a ready-to-use cell.
+      // Visual locking is handled by Conditional Formatting (amber style) set below.
+      // hScheduleNumber gets its dropdown from the range-based section; skip here.
+      if (colDef.key === 'hScheduleNumber') return;
 
       // Dropdown: long list → reference sheet range; short list → inline formula
       if (isDropdown && colDef.options) {
@@ -514,8 +520,8 @@ export async function exportTabToExcel(
         }
       }
 
-      // Number: decimal validation — rejects letters
-      if (isNumeric) {
+      // Number: decimal validation — rejects letters (skip conditionally locked to keep cell open)
+      if (isNumeric && !isCondLocked) {
         cell.dataValidation = {
           type: 'decimal',
           operator: 'between',
@@ -603,36 +609,59 @@ export async function exportTabToExcel(
       }
 
       // H Sched # dropdown: list of available schedule numbers (from hSchedules)
-      // Stored in _Lists sheet so it's referenceable by formula
+      // Applied to ALL reservoir rows so the dropdown is ready when user switches BC Mode in Excel.
       if (hSchedIdx >= 0 && hSchedules && hSchedules.length > 0) {
         const schedNums = hSchedules.map(s => s.number);
-        // Write schedule numbers to _Lists sheet in a dedicated column
         const listsSheet = wb.getWorksheet('_Lists');
         if (listsSheet) {
           // Find the next free column in _Lists
           const usedCols = listsSheet.columnCount || 0;
-          const schedCol = String.fromCharCode(65 + usedCols); // next column after existing ones
+          const schedCol = String.fromCharCode(65 + usedCols);
           listsSheet.getCell(`${schedCol}1`).value = '_hSchedNums';
           schedNums.forEach((num, r) => {
             listsSheet.getCell(`${schedCol}${r + 2}`).value = num;
           });
+          // Also store T/H pair strings alongside each schedule number for reference
+          const pairsCol = String.fromCharCode(65 + usedCols + 1);
+          listsSheet.getCell(`${pairsCol}1`).value = '_thPairsLookup';
+          hSchedules.forEach((sched, r) => {
+            const pairsStr = sched.points.map(p => `${p.time}:${p.head}`).join('; ');
+            listsSheet.getCell(`${pairsCol}${r + 2}`).value = pairsStr;
+          });
+
           const schedListRange = `_Lists!$${schedCol}$2:$${schedCol}$${schedNums.length + 1}`;
-          // Apply dropdown validation only to H Schedule rows for H Sched # column
+          const hSchedColLetter = excelColLetter(hSchedIdx);
+          const thPairsColLetter = thPairsIdx >= 0 ? excelColLetter(thPairsIdx) : null;
+
+          // Apply H Sched # dropdown to ALL data rows (not just schedule rows)
+          // so the dropdown is available the moment user switches BC Mode in Excel
           for (let r = 3; r <= maxDataRow; r++) {
-            const cell = ws.getCell(`${excelColLetter(hSchedIdx)}${r}`);
-            const rowData = rows[r - 3];
-            if (rowData?.data?.mode === 'schedule') {
-              cell.dataValidation = {
-                type: 'list',
-                allowBlank: false,
-                formulae: [schedListRange],
-                error: 'Please select a valid H Schedule number.',
-                errorTitle: 'Invalid Schedule',
-                showErrorMessage: true,
-              };
+            ws.getCell(`${hSchedColLetter}${r}`).dataValidation = {
+              type: 'list',
+              allowBlank: true,
+              formulae: [schedListRange],
+              showDropDown: false, // show the arrow
+              error: 'Please select a valid H Schedule number.',
+              errorTitle: 'Invalid Schedule',
+              showErrorMessage: true,
+            };
+
+            // T/H Pairs: auto-populate via IFERROR(INDEX/MATCH) formula so picking a
+            // schedule number from the dropdown immediately fills the pairs for reference.
+            // The cell remains editable (user can override). Import reads the text back.
+            if (thPairsColLetter) {
+              const nRows = schedNums.length;
+              const pairsRange  = `_Lists!$${pairsCol}$2:$${pairsCol}$${nRows + 1}`;
+              const schedRange  = `_Lists!$${schedCol}$2:$${schedCol}$${nRows + 1}`;
+              ws.getCell(`${thPairsColLetter}${r}`).value = {
+                formula: `IFERROR(INDEX(${pairsRange},MATCH(${hSchedColLetter}${r},${schedRange},0)),"")`,
+                result: '',
+              } as any;
             }
           }
         }
+      } else if (hSchedIdx >= 0) {
+        // No schedules defined yet — T/H Pairs stays blank but editable (no formula)
       }
     }
   }
