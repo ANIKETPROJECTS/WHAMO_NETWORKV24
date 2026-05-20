@@ -1357,7 +1357,12 @@ export function FlexTable({ open, onClose }: FlexTableProps) {
     }
     setIsExporting(true);
     try {
-      const exportRows: ExportRow[] = filteredRows.map(r => ({
+      // For the "Node" tab, only export basic nodes — specialized types
+      // (reservoir, junction, surgeTank, etc.) have their own dedicated tabs
+      const rowsToExport = excelFilter === 'node'
+        ? filteredRows.filter(r => r.subType === 'node')
+        : filteredRows;
+      const exportRows: ExportRow[] = rowsToExport.map(r => ({
         id: r.id, kind: r.kind, subType: r.subType, data: r.data,
       }));
       await exportTabToExcel(excelFilter, exportRows, globalUnit, tabLabel, hSchedules ?? []);
