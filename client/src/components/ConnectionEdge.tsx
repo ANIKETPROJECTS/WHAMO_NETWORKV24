@@ -8,13 +8,15 @@ import {
 import { TooltipWrapper, DataList } from './TooltipWrapper';
 import { useNetworkStore } from '@/lib/store';
 
-function PumpIcon({ color }: { color: string }) {
+function PumpIcon({ color, label }: { color: string; label?: string }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-      <circle cx="11" cy="11" r="10" fill="white" stroke={color} strokeWidth="1.5" />
-      <polygon points="8,7 17,11 8,15" fill={color} />
-      <rect x="4" y="9" width="4" height="4" rx="1" fill={color} />
-    </svg>
+    <div style={{
+      width: 28, height: 28, borderRadius: '50%',
+      border: `2px solid ${color}`, background: 'white',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <span style={{ fontSize: 8, fontWeight: 700, color, lineHeight: 1 }}>{label}</span>
+    </div>
   );
 }
 
@@ -30,16 +32,15 @@ function CheckValveIcon({ color }: { color: string }) {
   );
 }
 
-function TurbineIcon({ color }: { color: string }) {
+function TurbineIcon({ color, label }: { color: string; label?: string }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-      <circle cx="11" cy="11" r="10" fill="white" stroke={color} strokeWidth="1.5" />
-      <circle cx="11" cy="11" r="2.5" fill={color} />
-      <path d="M11 4 Q14 7 11 8.5 Q8 7 11 4Z" fill={color} opacity="0.7" />
-      <path d="M11 18 Q8 15 11 13.5 Q14 15 11 18Z" fill={color} opacity="0.7" />
-      <path d="M4 11 Q7 8 8.5 11 Q7 14 4 11Z" fill={color} opacity="0.7" />
-      <path d="M18 11 Q15 14 13.5 11 Q15 8 18 11Z" fill={color} opacity="0.7" />
-    </svg>
+    <div style={{
+      width: 28, height: 28, borderRadius: '50%',
+      border: `2px solid ${color}`, background: 'white',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <span style={{ fontSize: 8, fontWeight: 700, color, lineHeight: 1 }}>{label}</span>
+    </div>
   );
 }
 
@@ -114,15 +115,19 @@ export const ConnectionEdge = memo(({
           >
             {isElementEdge ? (
               <div className="flex flex-col items-center gap-0.5 cursor-help">
-                {isPump && <PumpIcon color={strokeColor} />}
-                {isCheckValve && <CheckValveIcon color={strokeColor} />}
-                {isTurbine && <TurbineIcon color={strokeColor} />}
-                <div
-                  className="px-1 py-0 rounded text-[8px] font-bold shadow-sm"
-                  style={{ background: 'white', color: strokeColor, border: `1px solid ${strokeColor}` }}
-                >
-                  {(displayData?.label as ReactNode) || id}
-                </div>
+                {isPump && <PumpIcon color={strokeColor} label={(displayData?.label as string) || id} />}
+                {isCheckValve && (
+                  <>
+                    <CheckValveIcon color={strokeColor} />
+                    <div
+                      className="px-1 py-0 rounded text-[8px] font-bold shadow-sm"
+                      style={{ background: 'white', color: strokeColor, border: `1px solid ${strokeColor}` }}
+                    >
+                      {(displayData?.label as ReactNode) || id}
+                    </div>
+                  </>
+                )}
+                {isTurbine && <TurbineIcon color={strokeColor} label={(displayData?.label as string) || id} />}
               </div>
             ) : (
               <div className="bg-white/90 backdrop-blur-sm px-1.5 py-0.5 rounded border border-slate-200 shadow-sm text-[9px] font-bold cursor-help hover:bg-white transition-colors">
