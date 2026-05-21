@@ -95,11 +95,18 @@
 }
 
 /* React Flow Customizations to match theme */
+.react-flow,
+.react-flow__renderer,
+.react-flow__pane {
+  background: #ffffff !important;
+}
 .react-flow__node {
-  @apply shadow-md border-0;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 .react-flow__node.selected {
-  @apply ring-2 ring-primary ring-offset-2;
+  @apply ring-0;
 }
 .react-flow__handle {
   @apply w-2 h-2 bg-primary border-2 border-background;
