@@ -65,6 +65,67 @@ import waterPumpIcon from "@assets/water-pump_1779523451215.png";
 import pipeIcon from "@assets/pipe_1779523475650.png";
 import turbineImgIcon from "@assets/turbine_1779523517554.png";
 
+// ─── Title bar compact button ─────────────────────────────────────────────────
+function TitleBarBtn({
+  imgSrc, icon, label, onClick, disabled,
+}: {
+  imgSrc?: string;
+  icon?: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "flex flex-row items-center gap-1 px-2 py-1 rounded transition-colors select-none",
+        disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-slate-100 active:bg-slate-200",
+      )}
+    >
+      {imgSrc
+        ? <img src={imgSrc} className="w-[18px] h-[18px] object-contain flex-shrink-0" alt={label} />
+        : <span className="flex-shrink-0 flex items-center">{icon}</span>
+      }
+      <span className="text-[10px] font-medium text-black whitespace-nowrap" style={{ fontFamily: 'Poppins, sans-serif' }}>{label}</span>
+    </button>
+  );
+}
+
+// ─── Inline ribbon button (icon + text side by side) ─────────────────────────
+function InlineRibbonBtn({
+  imgSrc, icon, label, onClick, disabled, active,
+  ...rest
+}: {
+  imgSrc?: string;
+  icon?: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  active?: boolean;
+  [key: string]: any;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      {...rest}
+      className={cn(
+        "flex flex-row items-center gap-2 px-3 py-2 rounded transition-colors select-none whitespace-nowrap",
+        disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-blue-50 active:bg-blue-100",
+        active ? "bg-blue-100 ring-1 ring-blue-300" : "",
+      )}
+    >
+      {imgSrc
+        ? <img src={imgSrc} className="w-[22px] h-[22px] object-contain flex-shrink-0" alt={label} />
+        : <span className="flex-shrink-0 flex items-center">{icon}</span>
+      }
+      <span className="text-[12px] font-medium text-black" style={{ fontFamily: 'Poppins, sans-serif' }}>{label}</span>
+    </button>
+  );
+}
+
 // ─── Ribbon helper components ────────────────────────────────────────────────
 function RibbonBtn({
   icon, label, onClick, disabled, active, highlight,
@@ -394,9 +455,21 @@ export function Header({
     <div className="flex flex-col border-b bg-white shadow-sm">
 
       {/* ── TITLE BAR ── */}
-      <div className="relative flex items-center gap-2 px-3 py-1 border-b border-slate-100">
-        <img src={folderIcon} alt="Folder" className="w-7 h-7 object-contain flex-shrink-0" />
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 px-3 py-1 border-b border-slate-100 bg-white">
+        {/* LEFT: File ops + Undo/Redo */}
+        <div className="flex items-center gap-0.5">
+          <TitleBarBtn imgSrc={addFileIcon} label="New" onClick={() => { clearNetwork(); }} />
+          <TitleBarBtn imgSrc={openFolderIcon} label="Open" onClick={onLoad} />
+          <TitleBarBtn imgSrc={floppyDiskIcon} label="Save" onClick={onSave} />
+          <TitleBarBtn imgSrc={disketteIcon} label="Save As" onClick={onSaveAs} />
+          <div className="w-px bg-slate-200 mx-1 h-5 flex-shrink-0" />
+          <TitleBarBtn icon={<Undo2 className="w-[16px] h-[16px]" />} label="Undo" onClick={undo} disabled={history.past.length === 0} />
+          <TitleBarBtn icon={<Redo2 className="w-[16px] h-[16px]" />} label="Redo" onClick={redo} disabled={history.future.length === 0} />
+        </div>
+
+        {/* CENTER: folder icon + project name */}
+        <div className="flex-1 flex justify-center items-center gap-2">
+          <img src={folderIcon} alt="Folder" className="w-6 h-6 object-contain flex-shrink-0" />
           <input
             className={`text-sm font-medium text-black bg-transparent border focus:ring-1 focus:ring-blue-500 px-1.5 py-0.5 rounded outline-none hover:bg-slate-50 min-w-[180px] ${projectNameError ? 'border-red-400 ring-1 ring-red-400' : 'border-transparent'}`}
             value={projectName}
@@ -410,12 +483,9 @@ export function Header({
             </div>
           )}
         </div>
-        <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none select-none">
-          <span className="text-sm font-semibold text-gray-700 tracking-tight whitespace-nowrap">
-            Hydraulic transient analysis software
-          </span>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5">
+
+        {/* RIGHT: Units pill */}
+        <div className="flex items-center gap-1.5">
           <span className="text-[10px] text-slate-400 font-medium">Units:</span>
           <div className="flex items-center rounded-full border border-slate-300 bg-white overflow-hidden shadow-sm">
             <button
@@ -431,115 +501,95 @@ export function Header({
       </div>
 
       {/* ── RIBBON ── */}
-      <div className="flex items-stretch bg-[#f3f5f9] border-b border-slate-200 w-full">
-
-        <RibbonGroup label="File">
-          <div className="grid grid-cols-2 gap-1">
-            <SmallRibbonBtn icon={<img src={addFileIcon} className="w-5 h-5 object-contain" alt="New" />} label="New" onClick={() => { clearNetwork(); }} />
-            <SmallRibbonBtn icon={<img src={openFolderIcon} className="w-5 h-5 object-contain" alt="Open" />} label="Open" onClick={onLoad} />
-            <SmallRibbonBtn icon={<img src={floppyDiskIcon} className="w-5 h-5 object-contain" alt="Save" />} label="Save" onClick={onSave} />
-            <SmallRibbonBtn icon={<img src={disketteIcon} className="w-5 h-5 object-contain" alt="Save As" />} label="Save As" onClick={onSaveAs} />
-          </div>
-        </RibbonGroup>
-
-        <RibbonGroup label="Edit">
-          <RibbonBtn icon={<Undo2 className="w-5 h-5" />} label="Undo" onClick={undo} disabled={history.past.length === 0} />
-          <RibbonBtn icon={<Redo2 className="w-5 h-5" />} label="Redo" onClick={redo} disabled={history.future.length === 0} />
-        </RibbonGroup>
+      <div className="flex items-stretch bg-[#f3f5f9] border-b border-slate-200 w-full overflow-x-auto">
 
         <RibbonGroup label="Insert">
-          <div className="grid grid-cols-4 gap-1">
-            <SmallRibbonBtn icon={<img src={damIcon} className="w-5 h-5 object-contain" alt="Reservoir" />} label="Reservoir" onClick={() => addNode("reservoir", { x: 100, y: 100 })} />
-            <SmallRibbonBtn icon={<img src={nodeCircleIcon} className="w-5 h-5 object-contain" alt="Node" />} label="Node" onClick={() => addNode("node", { x: 150, y: 150 })} />
-            <SmallRibbonBtn icon={<img src={yIntersectionIcon} className="w-5 h-5 object-contain" alt="Junction" />} label="Junction" onClick={() => addNode("junction", { x: 200, y: 150 })} />
-            <SmallRibbonBtn icon={<img src={waterTankIcon} className="w-5 h-5 object-contain" alt="Surge Tank" />} label="Surge Tank" onClick={() => addNode("surgeTank", { x: 250, y: 100 })} />
-            <SmallRibbonBtn icon={<img src={windIcon} className="w-5 h-5 object-contain" alt="Flow BC" />} label="Flow BC" onClick={() => addNode("flowBoundary", { x: 50, y: 150 })} />
-            <SmallRibbonBtn
-              icon={<img src={waterPumpIcon} className={`w-5 h-5 object-contain ${activeLinkTool === 'pump' ? 'opacity-100' : 'opacity-80'}`} alt="Pump" />}
-              label="Pump"
-              onClick={() => onSetLinkTool?.(activeLinkTool === 'pump' ? null : 'pump')}
-              active={activeLinkTool === 'pump'}
-              data-testid="ribbon-btn-pump"
-            />
-            <SmallRibbonBtn
-              icon={<img src={pipeIcon} className={`w-5 h-5 object-contain ${activeLinkTool === 'checkValve' ? 'opacity-100' : 'opacity-80'}`} alt="Check Valve" />}
-              label="Check Valve"
-              onClick={() => onSetLinkTool?.(activeLinkTool === 'checkValve' ? null : 'checkValve')}
-              active={activeLinkTool === 'checkValve'}
-              data-testid="ribbon-btn-checkvalve"
-            />
-            <SmallRibbonBtn
-              icon={<img src={turbineImgIcon} className={`w-5 h-5 object-contain ${activeLinkTool === 'turbine' ? 'opacity-100' : 'opacity-80'}`} alt="Turbine" />}
-              label="Turbine"
-              onClick={() => onSetLinkTool?.(activeLinkTool === 'turbine' ? null : 'turbine')}
-              active={activeLinkTool === 'turbine'}
-              data-testid="ribbon-btn-turbine"
-            />
-          </div>
+          <InlineRibbonBtn imgSrc={damIcon} label="Reservoir" onClick={() => addNode("reservoir", { x: 100, y: 100 })} />
+          <InlineRibbonBtn imgSrc={nodeCircleIcon} label="Node" onClick={() => addNode("node", { x: 150, y: 150 })} />
+          <InlineRibbonBtn imgSrc={yIntersectionIcon} label="Junction" onClick={() => addNode("junction", { x: 200, y: 150 })} />
+          <InlineRibbonBtn imgSrc={waterTankIcon} label="Surge Tank" onClick={() => addNode("surgeTank", { x: 250, y: 100 })} />
+          <InlineRibbonBtn imgSrc={windIcon} label="Flow BC" onClick={() => addNode("flowBoundary", { x: 50, y: 150 })} />
+          <InlineRibbonBtn
+            imgSrc={waterPumpIcon}
+            label="Pump"
+            onClick={() => onSetLinkTool?.(activeLinkTool === 'pump' ? null : 'pump')}
+            active={activeLinkTool === 'pump'}
+            data-testid="ribbon-btn-pump"
+          />
+          <InlineRibbonBtn
+            imgSrc={pipeIcon}
+            label="Check Valve"
+            onClick={() => onSetLinkTool?.(activeLinkTool === 'checkValve' ? null : 'checkValve')}
+            active={activeLinkTool === 'checkValve'}
+            data-testid="ribbon-btn-checkvalve"
+          />
+          <InlineRibbonBtn
+            imgSrc={turbineImgIcon}
+            label="Turbine"
+            onClick={() => onSetLinkTool?.(activeLinkTool === 'turbine' ? null : 'turbine')}
+            active={activeLinkTool === 'turbine'}
+            data-testid="ribbon-btn-turbine"
+          />
         </RibbonGroup>
 
         <RibbonGroup label="Tools">
-          <div className="grid grid-cols-2 gap-1">
-            <SmallRibbonBtn icon={<Layout className="w-5 h-5" />} label="Diagram" onClick={onShowDiagram} />
-            <SmallRibbonBtn
-              icon={<MousePointer2 className="w-5 h-5" />}
-              label="Node Sel."
-              onClick={() => window.dispatchEvent(new CustomEvent('toggleNodeSelection'))}
-            />
-            <SmallRibbonBtn
-              icon={<Table2 className="w-5 h-5" />}
-              label="Flex Table"
-              onClick={() => setShowFlexTable(true)}
-              data-testid="ribbon-btn-flextable"
-            />
-            <SmallRibbonBtn
-              icon={<BarChart2 className="w-5 h-5" />}
-              label="Visualization"
-              onClick={onVisualization}
-              data-testid="ribbon-btn-visualization"
-            />
-          </div>
+          <InlineRibbonBtn icon={<Layout className="w-[22px] h-[22px]" />} label="Diagram" onClick={onShowDiagram} />
+          <InlineRibbonBtn
+            icon={<MousePointer2 className="w-[22px] h-[22px]" />}
+            label="Node Sel."
+            onClick={() => window.dispatchEvent(new CustomEvent('toggleNodeSelection'))}
+          />
+          <InlineRibbonBtn
+            icon={<Table2 className="w-[22px] h-[22px]" />}
+            label="Flex Table"
+            onClick={() => setShowFlexTable(true)}
+            data-testid="ribbon-btn-flextable"
+          />
+          <InlineRibbonBtn
+            icon={<BarChart2 className="w-[22px] h-[22px]" />}
+            label="Visualization"
+            onClick={onVisualization}
+            data-testid="ribbon-btn-visualization"
+          />
         </RibbonGroup>
 
         <RibbonGroup label="Analysis">
-          <RibbonBtn
-            icon={<Settings2 className="w-5 h-5" />}
+          <InlineRibbonBtn
+            icon={<Settings2 className="w-[22px] h-[22px]" />}
             label="Comp. Params"
             onClick={() => setShowCompParams(true)}
           />
-          <RibbonBtn
-            icon={<ListVideo className="w-5 h-5" />}
+          <InlineRibbonBtn
+            icon={<ListVideo className="w-[22px] h-[22px]" />}
             label="Output Req."
             onClick={() => { setGenerateDialogMode(null); setShowOutputDialog(true); }}
           />
         </RibbonGroup>
 
         <RibbonGroup label="Generate">
-          <RibbonBtn
-            icon={<Download className="w-5 h-5 text-blue-700" />}
+          <InlineRibbonBtn
+            icon={<Download className="w-[22px] h-[22px] text-blue-700" />}
             label="Generate .INP"
             onClick={handleExport}
-            highlight
             data-testid="ribbon-btn-generate-inp"
           />
-          <RibbonBtn
-            icon={<Download className="w-5 h-5 text-blue-700" />}
+          <InlineRibbonBtn
+            icon={<Download className="w-[22px] h-[22px] text-blue-700" />}
             label={isGeneratingOut ? "Processing..." : "Generate .OUT"}
             onClick={handleOutGenerate}
-            highlight
             disabled={isGeneratingOut}
             data-testid="ribbon-btn-generate-out"
           />
         </RibbonGroup>
 
         <RibbonGroup label="View">
-          <RibbonBtn
-            icon={<Layout className="w-5 h-5" />}
+          <InlineRibbonBtn
+            icon={<Layout className="w-[22px] h-[22px]" />}
             label="Grid"
             onClick={() => window.dispatchEvent(new CustomEvent('toggle-grid'))}
           />
-          <RibbonBtn
-            icon={<Maximize2 className="w-5 h-5" />}
+          <InlineRibbonBtn
+            icon={<Maximize2 className="w-[22px] h-[22px]" />}
             label={isFullscreen ? "Exit FS" : "Full Screen"}
             onClick={() => {
               if (!document.fullscreenElement) {
@@ -549,8 +599,8 @@ export function Header({
               }
             }}
           />
-          <RibbonBtn
-            icon={showHoverData ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+          <InlineRibbonBtn
+            icon={showHoverData ? <Eye className="w-[22px] h-[22px]" /> : <EyeOff className="w-[22px] h-[22px]" />}
             label={showHoverData ? "Hide Labels" : "Show Labels"}
             onClick={() => setShowHoverData(!showHoverData)}
             active={showHoverData}
@@ -559,9 +609,9 @@ export function Header({
         </RibbonGroup>
 
         <RibbonGroup label="Help">
-          <RibbonBtn icon={<Info className="w-5 h-5" />} label="Help" onClick={() => setShowHelp(true)} />
-          <RibbonBtn
-            icon={<Layout className="w-5 h-5" />}
+          <InlineRibbonBtn icon={<Info className="w-[22px] h-[22px]" />} label="Help" onClick={() => setShowHelp(true)} />
+          <InlineRibbonBtn
+            icon={<Layout className="w-[22px] h-[22px]" />}
             label="Shortcuts"
             onClick={() => window.dispatchEvent(new CustomEvent('toggle-shortcut-console'))}
           />
