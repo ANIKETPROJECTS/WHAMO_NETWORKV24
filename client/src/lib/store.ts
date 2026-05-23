@@ -1111,20 +1111,25 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
     );
     idCounter = maxId + 1;
     
-    // Flatten variableData for conduits if it exists
+    // Flatten variableData for conduits if it exists; always normalize markerEnd to black
     const processedEdges = edges.map(edge => {
+      const base = {
+        ...edge,
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#000000' } as any,
+        style: { ...(edge.style as object || {}), stroke: '#000000', strokeWidth: 2 },
+      };
       if (edge.data?.variableData) {
         const { variableData, ...restData } = edge.data;
         return {
-          ...edge,
+          ...base,
           data: {
             ...restData,
             ...variableData,
-            variable: true // Ensure variable flag is set
+            variable: true
           }
         };
       }
-      return edge;
+      return base;
     });
     
     // Convert all nodes

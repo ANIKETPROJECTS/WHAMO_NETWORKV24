@@ -18,25 +18,73 @@ function useNodeOrderError(id: string) {
   return useNetworkStore(state => state.nodeOrderErrorIds.includes(id));
 }
 
-// Detect which directions already have connections on this node,
-// then return the first free direction for the label.
-function useLabelPosition(nodeId: string): 'bottom' | 'top' | 'right' | 'left' {
-  const edges = useNetworkStore(state => state.edges);
-  const usedHandles = new Set<string>();
-  edges.forEach(edge => {
-    if (edge.source === nodeId) usedHandles.add(edge.sourceHandle || '');
-    if (edge.target === nodeId) usedHandles.add(edge.targetHandle || '');
-  });
-  const hasBottom = usedHandles.has('s-bottom') || usedHandles.has('t-bottom');
-  const hasTop    = usedHandles.has('s-top')    || usedHandles.has('t-top');
-  const hasRight  = usedHandles.has('s-right')  || usedHandles.has('t-right');
-  const hasLeft   = usedHandles.has('s-left')   || usedHandles.has('t-left');
+type LabelPos = 'bottom' | 'top' | 'right' | 'left' | 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
 
-  if (!hasBottom) return 'bottom';
-  if (!hasRight)  return 'right';
-  if (!hasTop)    return 'top';
-  if (!hasLeft)   return 'left';
-  return 'bottom';
+// Angle-based label placement: computes actual angles to neighbor nodes,
+// tries 8 candidate directions, picks the one with the most open angular space.
+function useLabelPosition(nodeId: string): LabelPos {
+  const edges = useNetworkStore(state => state.edges);
+  const nodes = useNetworkStore(state => state.nodes);
+
+  const currentNode = nodes.find(n => n.id === nodeId);
+  if (!currentNode) return 'bottom';
+
+  const cx = currentNode.position.x + CIRCLE_SIZE / 2;
+  const cy = currentNode.position.y + CIRCLE_SIZE / 2;
+
+  // Compute angles (degrees, 0=right, 90=down, 180/-180=left, -90=up)
+  const angles: number[] = [];
+  edges.forEach(edge => {
+    const otherId = edge.source === nodeId ? edge.target
+                  : edge.target === nodeId ? edge.source
+                  : null;
+    if (!otherId) return;
+    const other = nodes.find(n => n.id === otherId);
+    if (!other) return;
+    const ox = other.position.x + CIRCLE_SIZE / 2;
+    const oy = other.position.y + CIRCLE_SIZE / 2;
+    angles.push(Math.atan2(oy - cy, ox - cx) * 180 / Math.PI);
+  });
+
+  // 8 candidates in priority order: cardinal first, then diagonals
+  const candidates: Array<[number, LabelPos]> = [
+    [ 90,  'bottom'],
+    [  0,  'right'],
+    [-90,  'top'],
+    [180,  'left'],
+    [ 45,  'bottom-right'],
+    [135,  'bottom-left'],
+    [-45,  'top-right'],
+    [-135, 'top-left'],
+  ];
+
+  // Angular gap threshold to consider a direction "free"
+  const FREE_THRESH = 40;
+
+  // First pass: find a direction with no connection within FREE_THRESH degrees
+  for (const [candAngle, pos] of candidates) {
+    const conflict = angles.some(a => {
+      let d = Math.abs(a - candAngle);
+      if (d > 180) d = 360 - d;
+      return d < FREE_THRESH;
+    });
+    if (!conflict) return pos;
+  }
+
+  // All crowded — pick the candidate that maximises the minimum angular distance
+  let bestPos: LabelPos = 'bottom';
+  let bestScore = -1;
+  for (const [candAngle, pos] of candidates) {
+    const minDist = angles.length === 0
+      ? 180
+      : Math.min(...angles.map(a => {
+          let d = Math.abs(a - candAngle);
+          if (d > 180) d = 360 - d;
+          return d;
+        }));
+    if (minDist > bestScore) { bestScore = minDist; bestPos = pos; }
+  }
+  return bestPos;
 }
 
 function circleStyle(selected: boolean, hasOrderError: boolean): React.CSSProperties {
@@ -56,8 +104,7 @@ function circleStyle(selected: boolean, hasOrderError: boolean): React.CSSProper
   };
 }
 
-// Build label style based on which direction is free
-function labelStyle(pos: 'bottom' | 'top' | 'right' | 'left'): React.CSSProperties {
+function getLabelStyle(pos: LabelPos): React.CSSProperties {
   const base: React.CSSProperties = {
     position: 'absolute',
     fontSize: 13,
@@ -67,11 +114,21 @@ function labelStyle(pos: 'bottom' | 'top' | 'right' | 'left'): React.CSSProperti
     pointerEvents: 'none',
     userSelect: 'none',
     lineHeight: 1,
+    background: 'rgba(255,255,255,0.9)',
+    borderRadius: 2,
+    padding: '1px 2px',
   };
-  if (pos === 'bottom') return { ...base, top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 5 };
-  if (pos === 'top')    return { ...base, bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 5 };
-  if (pos === 'right')  return { ...base, left: '100%', top: '50%', transform: 'translateY(-50%)', marginLeft: 8 };
-  return                        { ...base, right: '100%', top: '50%', transform: 'translateY(-50%)', marginRight: 8 };
+  const G = 5;
+  switch (pos) {
+    case 'bottom':       return { ...base, top:    `calc(100% + ${G}px)`, left:  '50%', transform: 'translateX(-50%)' };
+    case 'top':          return { ...base, bottom: `calc(100% + ${G}px)`, left:  '50%', transform: 'translateX(-50%)' };
+    case 'right':        return { ...base, left:   `calc(100% + ${G}px)`, top:   '50%', transform: 'translateY(-50%)' };
+    case 'left':         return { ...base, right:  `calc(100% + ${G}px)`, top:   '50%', transform: 'translateY(-50%)' };
+    case 'bottom-right': return { ...base, top:    `calc(100% + ${G}px)`, left:  `calc(100% + ${G}px)` };
+    case 'bottom-left':  return { ...base, top:    `calc(100% + ${G}px)`, right: `calc(100% + ${G}px)` };
+    case 'top-right':    return { ...base, bottom: `calc(100% + ${G}px)`, left:  `calc(100% + ${G}px)` };
+    case 'top-left':     return { ...base, bottom: `calc(100% + ${G}px)`, right: `calc(100% + ${G}px)` };
+  }
 }
 
 const AllHandles = () => (
@@ -87,7 +144,6 @@ const AllHandles = () => (
   </>
 );
 
-// Generic icon node with smart label placement
 function SmartIconNode({
   nodeId, selected, hasOrderError, icon, label, alt,
 }: {
@@ -101,12 +157,11 @@ function SmartIconNode({
         <img src={icon} style={{ width: ICON_SIZE, height: ICON_SIZE, objectFit: 'contain', pointerEvents: 'none' }} alt={alt} />
       </div>
       <AllHandles />
-      <span style={labelStyle(pos)}>{label}</span>
+      <span style={getLabelStyle(pos)}>{label}</span>
     </div>
   );
 }
 
-// Reservoir Node
 export const ReservoirNode = memo(({ id, data, selected }: NodeProps) => {
   const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
   const displayData = node ? node.data : data;
@@ -119,7 +174,6 @@ export const ReservoirNode = memo(({ id, data, selected }: NodeProps) => {
   );
 });
 
-// Basic Node (Simple Node) — text inside, no external label
 export const SimpleNode = memo(({ id, data, selected }: NodeProps) => {
   const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
   const displayData = node ? node.data : data;
@@ -138,7 +192,6 @@ export const SimpleNode = memo(({ id, data, selected }: NodeProps) => {
   );
 });
 
-// Junction Node
 export const JunctionNode = memo(({ id, data, selected }: NodeProps) => {
   const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
   const displayData = node ? node.data : data;
@@ -151,7 +204,6 @@ export const JunctionNode = memo(({ id, data, selected }: NodeProps) => {
   );
 });
 
-// Surge Tank
 export const SurgeTankNode = memo(({ id, data, selected }: NodeProps) => {
   const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
   const displayData = node ? node.data : data;
@@ -164,7 +216,6 @@ export const SurgeTankNode = memo(({ id, data, selected }: NodeProps) => {
   );
 });
 
-// Pump Node
 export const PumpNode = memo(({ id, data, selected }: NodeProps) => {
   const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
   const displayData = node ? node.data : data;
@@ -177,7 +228,6 @@ export const PumpNode = memo(({ id, data, selected }: NodeProps) => {
   );
 });
 
-// Check Valve Node
 export const CheckValveNode = memo(({ id, data, selected }: NodeProps) => {
   const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
   const displayData = node ? node.data : data;
@@ -190,7 +240,6 @@ export const CheckValveNode = memo(({ id, data, selected }: NodeProps) => {
   );
 });
 
-// Turbine Node
 export const TurbineNode = memo(({ id, data, selected }: NodeProps) => {
   const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
   const displayData = node ? node.data : data;
@@ -203,7 +252,6 @@ export const TurbineNode = memo(({ id, data, selected }: NodeProps) => {
   );
 });
 
-// Flow Boundary
 export const FlowBoundaryNode = memo(({ id, data, selected }: NodeProps) => {
   const node = useNetworkStore(state => state.nodes.find(n => n.id === id));
   const displayData = node ? node.data : data;

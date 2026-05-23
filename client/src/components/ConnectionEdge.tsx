@@ -42,6 +42,7 @@ export const ConnectionEdge = memo(({
   sourcePosition,
   targetPosition,
   style = {},
+  markerEnd,
   data,
 }: EdgeProps) => {
   const [edgePath, labelX, labelY] = getBezierPath({
@@ -89,7 +90,7 @@ export const ConnectionEdge = memo(({
     <>
       <BaseEdge
         path={edgePath}
-        markerEnd={BLACK_MARKER as any}
+        markerEnd={markerEnd}
         style={{
           ...style,
           strokeWidth: 2,
