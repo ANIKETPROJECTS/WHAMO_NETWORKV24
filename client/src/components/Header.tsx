@@ -203,10 +203,10 @@ function SmallRibbonBtn({
   );
 }
 
-function RibbonGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function RibbonGroup({ label, children, flex = 1 }: { label: string; children: React.ReactNode; flex?: number }) {
   return (
-    <div className="flex items-stretch flex-1">
-      <div className="flex flex-col flex-1">
+    <div className="flex items-stretch" style={{ flex }}>
+      <div className="flex flex-col w-full">
         <div className="text-center pt-1 pb-0.5">
           <span className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase" style={{ fontFamily: 'Poppins, sans-serif' }}>{label}</span>
         </div>
@@ -519,7 +519,7 @@ export function Header({
       {/* ── RIBBON ── */}
       <div className="flex items-stretch bg-[#f3f5f9] border-b border-slate-200 w-full">
 
-        <RibbonGroup label="Insert">
+        <RibbonGroup label="Insert" flex={8}>
           <InlineRibbonBtn imgSrc={damIcon} label="Reservoir" onClick={() => addNode("reservoir", { x: 100, y: 100 })} />
           <InlineRibbonBtn imgSrc={nodeCircleIcon} label="Node" onClick={() => addNode("node", { x: 150, y: 150 })} />
           <InlineRibbonBtn imgSrc={yIntersectionIcon} label="Junction" onClick={() => addNode("junction", { x: 200, y: 150 })} />
@@ -548,7 +548,7 @@ export function Header({
           />
         </RibbonGroup>
 
-        <RibbonGroup label="Tools">
+        <RibbonGroup label="Tools" flex={4}>
           <InlineRibbonBtn imgSrc={networkIcon} label="Diagram" onClick={onShowDiagram} />
           <InlineRibbonBtn
             imgSrc={clickIcon}
@@ -569,7 +569,7 @@ export function Header({
           />
         </RibbonGroup>
 
-        <RibbonGroup label="Analysis">
+        <RibbonGroup label="Analysis" flex={2}>
           <InlineRibbonBtn
             imgSrc={settingsWrenchIcon}
             label="Comp. Params"
@@ -582,7 +582,7 @@ export function Header({
           />
         </RibbonGroup>
 
-        <RibbonGroup label="Generate">
+        <RibbonGroup label="Generate" flex={2}>
           <InlineRibbonBtn
             imgSrc={inputIcon}
             label="Generate .INP"
@@ -598,7 +598,7 @@ export function Header({
           />
         </RibbonGroup>
 
-        <RibbonGroup label="View">
+        <RibbonGroup label="View" flex={2}>
           <InlineRibbonBtn
             imgSrc={gridIcon}
             label="Grid"
