@@ -1399,7 +1399,7 @@ export function FlexTable({ open, onClose }: FlexTableProps) {
     <>
       <Dialog open={open} onOpenChange={v => !v && onClose()}>
         <DialogContent
-          className="max-w-none w-screen h-screen rounded-none flex flex-col p-0 gap-0 overflow-hidden"
+          className="!fixed !left-0 !top-0 !translate-x-0 !translate-y-0 !max-w-none !w-screen !h-screen !rounded-none flex flex-col !p-0 !gap-0 overflow-hidden !border-0"
           data-testid="flextable-dialog"
           hideCloseButton
         >

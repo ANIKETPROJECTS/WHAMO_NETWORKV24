@@ -37,8 +37,8 @@ function esc(s: string) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ─── Node shape ───────────────────────────────────────────────────────────────
-function renderNode(type: string, x: number, y: number, label: string): string {
+// ─── Node shape — no SVG tooltip, just data attributes for React overlay ───────
+function renderNode(type: string, x: number, y: number, label: string, srcId: string, srcType: string): string {
   const hh = nHH(type);
   const hw = nHW(type);
   const c  = col(type);
@@ -59,32 +59,15 @@ function renderNode(type: string, x: number, y: number, label: string): string {
     lbl = `<text class="lbl" x="${x}" y="${y - hh - 8}" text-anchor="middle" font-size="11"
       font-weight="600" fill="#111" font-family="Arial,sans-serif">${esc(label)}</text>`;
   } else {
-    // All circle types: clean filled dot
     shape = `<circle cx="${x}" cy="${y}" r="${R}"
       fill="${c.fill}" stroke="${c.stroke}" stroke-width="2"/>`;
     lbl = `<text class="lbl" x="${x}" y="${y - R - 7}" text-anchor="middle" font-size="11"
       font-weight="600" fill="#111" font-family="Arial,sans-serif">${esc(label)}</text>`;
   }
 
-  // Tooltip (shown on hover via CSS)
-  const typeName = type === 'checkValve' ? 'Check Valve'
-    : type === 'flowBoundary' ? 'Flow BC'
-    : type === 'surgeTank'   ? 'Surge Tank'
-    : type.charAt(0).toUpperCase() + type.slice(1);
-  const tw = Math.max(esc(label).length * 8, typeName.length * 7) + 24;
-  const tip = `<g class="tip" style="pointer-events:none">
-    <rect x="${x + hw + 5}" y="${y - 18}" width="${tw}" height="36" rx="6"
-      fill="white" stroke="#bbb" stroke-width="1" filter="url(#sh)"/>
-    <text x="${x + hw + 13}" y="${y - 3}" font-size="11" font-weight="700"
-      fill="#111" font-family="Arial,sans-serif">${esc(label)}</text>
-    <text x="${x + hw + 13}" y="${y + 12}" font-size="10" fill="#666"
-      font-family="Arial,sans-serif">${typeName}</text>
-  </g>`;
-
-  return `<g class="ng">
+  return `<g class="ng" data-srcid="${esc(srcId)}" data-srctype="${esc(srcType)}" style="cursor:pointer">
   ${shape}
   ${lbl}
-  ${tip}
 </g>`;
 }
 
@@ -96,14 +79,16 @@ export function generateSystemDiagramSVG(
 ): string {
   const { showLabels } = options;
 
-  type VN = { id: string; type: string; label: string };
-  type VE = { from: string; to: string; label: string; isDummy: boolean };
+  type VN = { id: string; type: string; label: string; srcId: string; srcType: string };
+  type VE = { from: string; to: string; label: string; isDummy: boolean; srcEdgeId: string };
 
   // Build virtual graph: edge-based elements (pump/checkValve/turbine) → inline virtual nodes
   const vns: VN[] = nodes.map(n => ({
-    id:    n.id,
-    type:  n.type || 'node',
-    label: String(n.data?.label ?? ''),
+    id:      n.id,
+    type:    n.type || 'node',
+    label:   String(n.data?.label ?? ''),
+    srcId:   n.id,
+    srcType: 'node',
   }));
 
   const ves: VE[] = [];
@@ -116,11 +101,11 @@ export function generateSystemDiagramSVG(
 
     if (isElem) {
       const vid = `__v_${e.id}`;
-      vns.push({ id: vid, type: etype, label: elabel });
-      ves.push({ from: e.source, to: vid,       label: '',     isDummy: false });
-      ves.push({ from: vid,      to: e.target,  label: '',     isDummy: false });
+      vns.push({ id: vid, type: etype, label: elabel, srcId: e.id, srcType: 'edge' });
+      ves.push({ from: e.source, to: vid,      label: '',     isDummy: false, srcEdgeId: e.id });
+      ves.push({ from: vid,      to: e.target, label: '',     isDummy: false, srcEdgeId: e.id });
     } else {
-      ves.push({ from: e.source, to: e.target, label: elabel, isDummy });
+      ves.push({ from: e.source, to: e.target, label: elabel, isDummy, srcEdgeId: e.id });
     }
   });
 
@@ -155,7 +140,6 @@ export function generateSystemDiagramSVG(
       if (inDegCopy[v] <= 0) topoQ.push(v);
     }
   }
-  // Append any cycle nodes (not reachable via topo sort)
   vns.forEach(n => { if (!visited.has(n.id)) topoOrder.push(n.id); });
 
   // Longest-path DP over topo order
@@ -176,20 +160,18 @@ export function generateSystemDiagramSVG(
     byLv[l].push(n.id);
   });
 
-  // Row-ordering heuristic: sort by average y of predecessors to reduce crossings
   const nm: Record<string, VN> = {};
   vns.forEach(n => { nm[n.id] = n; });
 
   const nLevels      = Math.max(...Object.keys(byLv).map(Number)) + 1;
   const maxPerLevel  = Math.max(...Object.values(byLv).map(a => a.length));
-  const labelPadV    = 32; // room for labels above circles
+  const labelPadV    = 32;
 
   const svgW = MG * 2 + (nLevels - 1) * SX + RRW + 80;
   const svgH = Math.max(260, MG * 2 + (maxPerLevel - 1) * SY + STH + labelPadV + 40);
 
   const pos: Record<string, { x: number; y: number }> = {};
 
-  // First pass: assign x; temporarily assign y by index
   Object.entries(byLv).forEach(([lStr, ids]) => {
     const l   = parseInt(lStr);
     const cx  = MG + l * SX;
@@ -200,12 +182,9 @@ export function generateSystemDiagramSVG(
     });
   });
 
-  // Second pass: sort rows within each level by median predecessor y (barycenter)
-  // We iterate level by level left to right
   for (let l = 1; l < nLevels; l++) {
     const ids = byLv[l];
     if (!ids || ids.length < 2) continue;
-    // For each node in this level, compute the average y of its predecessors
     const score: Record<string, number> = {};
     ids.forEach(id => {
       const preds = ves
@@ -221,7 +200,7 @@ export function generateSystemDiagramSVG(
     });
   }
 
-  // ── Detect parallel edges (same from→to pair) and assign vertical offset ──
+  // ── Detect parallel edges ──────────────────────────────────────────────────
   const pairCount: Record<string, number>  = {};
   const pairIndex: Record<string, number>  = {};
   ves.forEach(ve => {
@@ -243,9 +222,8 @@ export function generateSystemDiagramSVG(
   </filter>
 </defs>
 <style>
-  .ng:hover .tip { visibility: visible !important; }
-  .cg:hover .tip { visibility: visible !important; }
-  .tip { visibility: hidden; }
+  .ng { cursor: pointer; }
+  .cg { cursor: pointer; }
 </style>
 `;
 
@@ -258,7 +236,6 @@ export function generateSystemDiagramSVG(
     const t1 = nm[ve.from]?.type || 'node';
     const t2 = nm[ve.to]?.type   || 'node';
 
-    // Parallel-edge vertical offset so they don't overlap
     const k     = `${ve.from}→${ve.to}`;
     const total = pairCount[k] || 1;
     const idx   = ve['_idx'] as number ?? 0;
@@ -284,28 +261,19 @@ export function generateSystemDiagramSVG(
 
     svg += `<path d="${d}" ${sty} fill="none" ${mk}/>\n`;
 
-    // Conduit label pill — centered on the arrow line
+    // Conduit label pill — centered on the arrow line, with data attributes for React tooltip
     if (ve.label) {
       const lx = Math.abs(y1 - y2) < 3
         ? (x1 + x2) / 2
-        : (x1 * 3 + x2) / 4;   // 25% along the path, on the first horiz segment
+        : (x1 * 3 + x2) / 4;
       const ly  = Math.abs(y1 - y2) < 3 ? y1 : y1;
       const lw  = ve.label.length * 7 + 16;
       const lh  = 14;
-      const tipW = Math.max(ve.label.length * 7 + 32, 90);
-      svg += `<g class="cg" style="pointer-events:all">
+      svg += `<g class="cg" data-srcid="${esc(ve.srcEdgeId)}" data-srctype="edge" style="pointer-events:all;cursor:pointer">
   <rect class="lbl" x="${lx - lw / 2}" y="${ly - lh / 2}" width="${lw}" height="${lh}"
     rx="7" fill="white" stroke="#888" stroke-width="1"/>
   <text class="lbl" x="${lx}" y="${ly + 4.5}" text-anchor="middle" font-size="9"
     font-weight="700" fill="#333" font-family="Arial,sans-serif">${esc(ve.label)}</text>
-  <g class="tip" style="pointer-events:none;visibility:hidden">
-    <rect x="${lx + lw / 2 + 6}" y="${ly - 20}" width="${tipW}" height="42" rx="6"
-      fill="white" stroke="#bbb" stroke-width="1" filter="url(#sh)"/>
-    <text x="${lx + lw / 2 + 14}" y="${ly - 5}" font-size="11" font-weight="700"
-      fill="#111" font-family="Arial,sans-serif">${esc(ve.label)}</text>
-    <text x="${lx + lw / 2 + 14}" y="${ly + 10}" font-size="10" fill="#666"
-      font-family="Arial,sans-serif">${ve.isDummy ? 'Dummy Pipe' : 'Conduit'}</text>
-  </g>
 </g>\n`;
     }
   });
@@ -314,10 +282,9 @@ export function generateSystemDiagramSVG(
   vns.forEach(vn => {
     const p = pos[vn.id];
     if (!p) return;
-    svg += renderNode(vn.type, p.x, p.y, vn.label);
+    svg += renderNode(vn.type, p.x, p.y, vn.label, vn.srcId, vn.srcType);
   });
 
-  // Apply showLabels toggle via CSS class on a wrapper group
   const labelDisplay = showLabels ? '' : ' .lbl{display:none}';
   svg = svg.replace('<style>', `<style>${labelDisplay}`);
 

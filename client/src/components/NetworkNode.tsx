@@ -10,7 +10,7 @@ import pipeIcon from '@assets/pipe_1779523475650.png';
 import turbineImgIcon from '@assets/turbine_1779523517554.png';
 import windIcon from '@assets/wind_1779523398812.png';
 
-const HandleStyle = "w-5 h-5 bg-black border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity";
+const HandleStyle = "!w-7 !h-7 bg-black border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity";
 export const CIRCLE_SIZE = 72;
 const ICON_SIZE = 34;
 

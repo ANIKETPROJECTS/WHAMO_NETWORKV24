@@ -695,6 +695,7 @@ function DesignerInner() {
   const [showLabels, setShowLabels] = useState(true);
   const [diagramSvg, setDiagramSvg] = useState<string | null>(null);
   const [diagramView, setDiagramView] = useState({ scale: 1, panX: 0, panY: 0 });
+  const [diagramTooltip, setDiagramTooltip] = useState<{ x: number; y: number; srcId: string; srcType: string } | null>(null);
   const diagramContainerRef = useRef<HTMLDivElement>(null);
   const isPanningRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
@@ -840,6 +841,17 @@ function DesignerInner() {
       window.removeEventListener('mouseup', onMouseUp);
     };
   }, [showDiagram]);
+
+  const handleDiagramMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (isPanningRef.current) { setDiagramTooltip(null); return; }
+    const target = e.target as Element;
+    const el = target.closest('[data-srcid]') as Element | null;
+    if (!el) { setDiagramTooltip(null); return; }
+    const srcId = el.getAttribute('data-srcid') || '';
+    const srcType = el.getAttribute('data-srctype') || '';
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDiagramTooltip({ x: e.clientX - rect.left + 14, y: e.clientY - rect.top + 14, srcId, srcType });
+  }, []);
 
   const downloadImage = async () => {
     const element = document.getElementById('system-diagram-container');
@@ -1204,8 +1216,10 @@ function DesignerInner() {
                   
                   <div
                     ref={diagramContainerRef}
-                    className="flex-1 overflow-hidden bg-white"
+                    className="flex-1 overflow-hidden bg-white relative"
                     style={{ cursor: 'grab', userSelect: 'none' }}
+                    onMouseMove={handleDiagramMouseMove}
+                    onMouseLeave={() => setDiagramTooltip(null)}
                   >
                     <div
                       id="system-diagram-container"
@@ -1217,6 +1231,88 @@ function DesignerInner() {
                       }}
                       dangerouslySetInnerHTML={{ __html: diagramSvg || '' }}
                     />
+                    {/* React tooltip overlay — always renders on top of SVG */}
+                    {diagramTooltip && (() => {
+                      const node = nodes.find(n => n.id === diagramTooltip.srcId);
+                      const edge = edges.find(e => e.id === diagramTooltip.srcId);
+                      if (!node && !edge) return null;
+
+                      const unit = (node?.data.unit || edge?.data.unit || 'SI') as string;
+                      const lenU = unit === 'FPS' ? 'ft' : 'm';
+                      const elevU = unit === 'FPS' ? 'ft' : 'm';
+
+                      const rows: { label: string; value: string }[] = [];
+
+                      if (node) {
+                        const d = node.data;
+                        const typeName = d.type === 'checkValve' ? 'Check Valve'
+                          : d.type === 'flowBoundary' ? 'Flow BC'
+                          : d.type === 'surgeTank' ? 'Surge Tank'
+                          : d.type ? d.type.charAt(0).toUpperCase() + d.type.slice(1) : 'Node';
+                        rows.push({ label: 'Type', value: typeName });
+                        rows.push({ label: 'Label', value: String(d.label || '') });
+                        if (d.nodeNumber !== undefined) rows.push({ label: 'Node #', value: String(d.nodeNumber) });
+                        if (d.elevation !== undefined && d.elevation !== '') rows.push({ label: `Elevation (${elevU})`, value: String(d.elevation) });
+                        if (d.reservoirElevation !== undefined && d.reservoirElevation !== '') rows.push({ label: `Reservoir Elev (${elevU})`, value: String(d.reservoirElevation) });
+                        if (d.tankTop !== undefined && d.tankTop !== '') rows.push({ label: `Tank Top (${elevU})`, value: String(d.tankTop) });
+                        if (d.tankBottom !== undefined && d.tankBottom !== '') rows.push({ label: `Tank Bottom (${elevU})`, value: String(d.tankBottom) });
+                        if (d.topElevation !== undefined && d.topElevation !== '') rows.push({ label: `Top Elev (${elevU})`, value: String(d.topElevation) });
+                        if (d.bottomElevation !== undefined && d.bottomElevation !== '') rows.push({ label: `Bottom Elev (${elevU})`, value: String(d.bottomElevation) });
+                        if (d.diameter !== undefined && d.diameter !== '') rows.push({ label: `Diameter`, value: String(d.diameter) });
+                        if (d.comment) rows.push({ label: 'Comment', value: String(d.comment) });
+                      } else if (edge) {
+                        const d = edge.data!;
+                        const typeName = d.type === 'checkValve' ? 'Check Valve'
+                          : d.type === 'dummy' ? 'Dummy Pipe'
+                          : d.type === 'conduit' ? 'Conduit'
+                          : d.type ? d.type.charAt(0).toUpperCase() + d.type.slice(1) : 'Edge';
+                        rows.push({ label: 'Type', value: typeName });
+                        rows.push({ label: 'Label', value: String(d.label || '') });
+                        if (d.length !== undefined && d.length !== '') rows.push({ label: `Length (${lenU})`, value: String(d.length) });
+                        if (d.diameter !== undefined && d.diameter !== '') rows.push({ label: `Diameter`, value: String(d.diameter) });
+                        if (d.celerity !== undefined && d.celerity !== '') rows.push({ label: `Wave Speed`, value: String(d.celerity) });
+                        if (d.friction !== undefined && d.friction !== '') rows.push({ label: 'Friction', value: String(d.friction) });
+                        if (d.numSegments !== undefined) rows.push({ label: 'Segments', value: String(d.numSegments) });
+                        if (d.pumpStatus) rows.push({ label: 'Pump Status', value: String(d.pumpStatus) });
+                        if (d.rq !== undefined && d.rq !== '') rows.push({ label: 'Rated Flow', value: String(d.rq) });
+                        if (d.rhead !== undefined && d.rhead !== '') rows.push({ label: 'Rated Head', value: String(d.rhead) });
+                        if (d.valveStatus) rows.push({ label: 'Valve Status', value: String(d.valveStatus) });
+                        if (d.valveDiam !== undefined && d.valveDiam !== '') rows.push({ label: 'Valve Diam', value: String(d.valveDiam) });
+                        if (d.turbineType !== undefined) rows.push({ label: 'Turbine Type', value: String(d.turbineType) });
+                        if (d.syncSpeed !== undefined && d.syncSpeed !== '') rows.push({ label: 'Sync Speed', value: String(d.syncSpeed) });
+                        if (d.comment) rows.push({ label: 'Comment', value: String(d.comment) });
+                      }
+
+                      // Keep tooltip within bounds
+                      const containerW = diagramContainerRef.current?.clientWidth || 800;
+                      const containerH = diagramContainerRef.current?.clientHeight || 600;
+                      const tipW = 220;
+                      const tipH = rows.length * 20 + 36;
+                      const tx = diagramTooltip.x + tipW > containerW ? diagramTooltip.x - tipW - 28 : diagramTooltip.x;
+                      const ty = diagramTooltip.y + tipH > containerH ? containerH - tipH - 8 : diagramTooltip.y;
+
+                      return (
+                        <div
+                          key={diagramTooltip.srcId}
+                          style={{ left: tx, top: ty, width: tipW, pointerEvents: 'none', zIndex: 999 }}
+                          className="absolute bg-white border border-slate-200 rounded-lg shadow-xl py-2 px-3 text-xs"
+                        >
+                          <div className="font-bold text-slate-800 text-[11px] mb-1.5 uppercase tracking-wider border-b pb-1">
+                            {rows[0]?.value} Properties
+                          </div>
+                          <table className="w-full border-collapse">
+                            <tbody>
+                              {rows.map(({ label, value }) => (
+                                <tr key={label} className="border-b border-slate-50 last:border-0">
+                                  <td className="py-0.5 pr-2 text-slate-500 font-medium whitespace-nowrap">{label}</td>
+                                  <td className="py-0.5 text-slate-800 font-semibold text-right">{value}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </ResizablePanel>

@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff,
   BarChart2,
+  X,
 } from "lucide-react";
 import { FlexTable } from "@/components/FlexTable";
 import { Button } from "@/components/ui/button";
