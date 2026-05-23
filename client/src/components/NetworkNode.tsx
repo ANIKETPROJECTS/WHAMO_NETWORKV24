@@ -10,9 +10,9 @@ import pipeIcon from '@assets/pipe_1779523475650.png';
 import turbineImgIcon from '@assets/turbine_1779523517554.png';
 import windIcon from '@assets/wind_1779523398812.png';
 
-const HandleStyle = "w-2 h-2 bg-black border border-white opacity-0 group-hover:opacity-100 transition-opacity";
+const HandleStyle = "w-4 h-4 bg-black border-2 border-white opacity-0 group-hover:opacity-100 transition-opacity";
 export const CIRCLE_SIZE = 72;
-const ICON_SIZE = 30;
+const ICON_SIZE = 34;
 
 function useNodeOrderError(id: string) {
   return useNetworkStore(state => state.nodeOrderErrorIds.includes(id));
@@ -29,7 +29,6 @@ function circleStyle(selected: boolean, hasOrderError: boolean): React.CSSProper
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
     position: 'absolute',
     inset: 0,
     transition: 'all 0.15s',
@@ -50,7 +49,7 @@ const AllHandles = () => (
   </>
 );
 
-// Circle with icon + label both inside
+// Circle with icon inside and label below the circle
 function IconNode({
   nodeId, selected, hasOrderError, icon, label, alt,
 }: {
@@ -61,10 +60,22 @@ function IconNode({
     <div style={{ position: 'relative', width: CIRCLE_SIZE, height: CIRCLE_SIZE }} className="group">
       <div style={circleStyle(selected, hasOrderError)}>
         <img src={icon} style={{ width: ICON_SIZE, height: ICON_SIZE, objectFit: 'contain', pointerEvents: 'none' }} alt={alt} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#000', lineHeight: 1, whiteSpace: 'nowrap', userSelect: 'none' }}>
-          {label}
-        </span>
       </div>
+      <span style={{
+        position: 'absolute',
+        top: CIRCLE_SIZE + 4,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        fontSize: 11,
+        fontWeight: 700,
+        color: '#000',
+        lineHeight: 1,
+        whiteSpace: 'nowrap',
+        userSelect: 'none',
+        pointerEvents: 'none',
+      }}>
+        {label}
+      </span>
       <AllHandles />
     </div>
   );
