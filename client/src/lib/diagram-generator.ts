@@ -1,13 +1,28 @@
 import { WhamoNode, WhamoEdge } from './store';
 
-// Layout constants
-const R = 26;               // circle radius
-const RRW = 58; const RRH = 36; // reservoir / flowBoundary rect
-const STW = 30; const STH = 52; // surgeTank rect
-const SX = 190;             // horizontal spacing (column pitch)
-const SY = 120;             // vertical spacing (row pitch)
-const MG = 90;              // canvas margin
+// ─── Layout constants ─────────────────────────────────────────────────────────
+const R = 8;                        // small circle radius (node, junction, pump, etc.)
+const RRW = 40; const RRH = 24;     // reservoir / flowBoundary rect (w × h)
+const STW = 18; const STH = 30;     // surgeTank rect (w × h)
+const SX = 145;                     // column pitch
+const SY = 90;                      // row pitch
+const MG = 80;                      // canvas margin
 
+// ─── Per-type colours ─────────────────────────────────────────────────────────
+const COLORS: Record<string, { fill: string; stroke: string; label: string }> = {
+  reservoir:    { fill: '#3498db', stroke: '#2166aa', label: '#fff'    },
+  surgeTank:    { fill: '#e67e22', stroke: '#b85c00', label: '#fff'    },
+  flowBoundary: { fill: '#8e44ad', stroke: '#6c3483', label: '#fff'    },
+  node:         { fill: '#cfd8dc', stroke: '#78909c', label: '#1a1a2e' },
+  junction:     { fill: '#e74c3c', stroke: '#a93226', label: '#fff'    },
+  pump:         { fill: '#1abc9c', stroke: '#148f77', label: '#fff'    },
+  checkValve:   { fill: '#2c3e50', stroke: '#1a252f', label: '#fff'    },
+  turbine:      { fill: '#d35400', stroke: '#9a3a00', label: '#fff'    },
+};
+
+function c(t: string) { return COLORS[t] ?? COLORS.node; }
+
+// Connection half-widths for routing lines to/from shape edges
 function nHW(t: string): number {
   if (t === 'reservoir' || t === 'flowBoundary') return RRW / 2;
   if (t === 'surgeTank') return STW / 2;
@@ -19,82 +34,72 @@ function nHH(t: string): number {
   return R;
 }
 
-function renderNode(type: string, x: number, y: number, label: string): string {
-  const hw = nHW(type);
-  const hh = nHH(type);
-  const lbl = `<text x="${x}" y="${y + hh + 15}" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="Arial,sans-serif">${escapeXml(label)}</text>`;
-
-  switch (type) {
-    case 'reservoir':
-      return (
-        `<rect x="${x - hw}" y="${y - hh}" width="${hw * 2}" height="${hh * 2}" rx="3" fill="white" stroke="#000" stroke-width="2"/>` +
-        `<path d="M${x - hw + 8} ${y - 5} Q${x} ${y - 11} ${x + hw - 8} ${y - 5}" fill="none" stroke="#000" stroke-width="1.5"/>` +
-        `<path d="M${x - hw + 8} ${y + 3} Q${x} ${y - 3} ${x + hw - 8} ${y + 3}" fill="none" stroke="#000" stroke-width="1.5"/>` +
-        lbl
-      );
-
-    case 'surgeTank':
-      return (
-        `<rect x="${x - hw}" y="${y - hh}" width="${hw * 2}" height="${hh * 2}" rx="2" fill="white" stroke="#000" stroke-width="2"/>` +
-        `<line x1="${x - hw}" y1="${y - hh + 14}" x2="${x + hw}" y2="${y - hh + 14}" stroke="#000" stroke-width="1.5"/>` +
-        lbl
-      );
-
-    case 'flowBoundary':
-      return (
-        `<rect x="${x - hw}" y="${y - hh}" width="${hw * 2}" height="${hh * 2}" rx="3" fill="white" stroke="#000" stroke-width="2"/>` +
-        `<path d="M${x - hw + 8} ${y} Q${x - hw / 2 + 4} ${y - 7} ${x} ${y} Q${x + hw / 2 - 4} ${y + 7} ${x + hw - 8} ${y}" fill="none" stroke="#000" stroke-width="1.5"/>` +
-        lbl
-      );
-
-    case 'junction':
-      return (
-        `<circle cx="${x}" cy="${y}" r="${R}" fill="white" stroke="#000" stroke-width="2"/>` +
-        `<line x1="${x}" y1="${y + R - 7}" x2="${x}" y2="${y + 2}" stroke="#000" stroke-width="2.5"/>` +
-        `<line x1="${x}" y1="${y + 2}" x2="${x - 9}" y2="${y - 10}" stroke="#000" stroke-width="2.5"/>` +
-        `<line x1="${x}" y1="${y + 2}" x2="${x + 9}" y2="${y - 10}" stroke="#000" stroke-width="2.5"/>` +
-        lbl
-      );
-
-    case 'pump':
-      return (
-        `<circle cx="${x}" cy="${y}" r="${R}" fill="white" stroke="#000" stroke-width="2"/>` +
-        `<circle cx="${x}" cy="${y - 2}" r="8" fill="none" stroke="#000" stroke-width="1.5"/>` +
-        `<path d="M${x} ${y - 10} Q${x + 12} ${y - 7} ${x + 11} ${y + 3}" stroke="#000" stroke-width="1.5" fill="none"/>` +
-        `<path d="M${x} ${y + 6} Q${x - 12} ${y + 3} ${x - 11} ${y - 7}" stroke="#000" stroke-width="1.5" fill="none"/>` +
-        lbl
-      );
-
-    case 'checkValve':
-      return (
-        `<circle cx="${x}" cy="${y}" r="${R}" fill="white" stroke="#000" stroke-width="2"/>` +
-        `<polygon points="${x - 10},${y - 9} ${x - 10},${y + 9} ${x + 7},${y}" fill="#000"/>` +
-        `<line x1="${x + 7}" y1="${y - 11}" x2="${x + 7}" y2="${y + 11}" stroke="#000" stroke-width="2.5"/>` +
-        lbl
-      );
-
-    case 'turbine':
-      return (
-        `<circle cx="${x}" cy="${y}" r="${R}" fill="white" stroke="#000" stroke-width="2"/>` +
-        `<circle cx="${x}" cy="${y}" r="4" fill="#000"/>` +
-        `<path d="M${x} ${y} L${x + 4} ${y - 19} A19 19 0 0 1 ${x + 19} ${y - 4} Z" fill="#000" opacity="0.85"/>` +
-        `<path d="M${x} ${y} L${x - 4} ${y + 19} A19 19 0 0 1 ${x - 19} ${y + 4} Z" fill="#000" opacity="0.85"/>` +
-        lbl
-      );
-
-    case 'node':
-    default:
-      return (
-        `<circle cx="${x}" cy="${y}" r="${R}" fill="white" stroke="#000" stroke-width="2"/>` +
-        `<text x="${x}" y="${y + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="Arial,sans-serif">${escapeXml(label)}</text>`
-      );
-  }
-}
-
 function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ─── Tooltip helper ───────────────────────────────────────────────────────────
+function tooltip(x: number, y: number, hh: number, label: string, typeName: string): string {
+  const line1 = escapeXml(label);
+  const line2 = typeName;
+  const tw = Math.max(line1.length, line2.length) * 7 + 20;
+  const th = 36;
+  const tx = x + nHW(typeName.toLowerCase()) + 6;
+  const ty = y - th / 2;
+  return `<g class="tip" style="visibility:hidden;pointer-events:none">
+    <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="5" fill="white" stroke="#aaa" stroke-width="1" filter="url(#sh)"/>
+    <text x="${tx + 8}" y="${ty + 14}" font-size="10" font-weight="700" fill="#222" font-family="Arial,sans-serif">${line1}</text>
+    <text x="${tx + 8}" y="${ty + 27}" font-size="9" fill="#666" font-family="Arial,sans-serif">${line2}</text>
+  </g>`;
+}
+
+// ─── Node shape renderer ─────────────────────────────────────────────────────
+function renderNode(type: string, x: number, y: number, label: string, showLabels: boolean): string {
+  const hw = nHW(type);
+  const hh = nHH(type);
+  const col = c(type);
+
+  // For rect types: label inside the rect; no label above
+  // For circle types: label above the circle
+  let shape = '';
+  let labelEl = '';
+  const typeName = type.charAt(0).toUpperCase() + type.slice(1).replace(/([A-Z])/g, ' $1').trim();
+
+  if (type === 'reservoir' || type === 'flowBoundary') {
+    shape = `<rect x="${x - hw}" y="${y - hh}" width="${hw * 2}" height="${hh * 2}" rx="4"
+      fill="${col.fill}" stroke="${col.stroke}" stroke-width="1.5"/>`;
+    if (showLabels) {
+      labelEl = `<text x="${x}" y="${y + 4}" text-anchor="middle" font-size="10" font-weight="700"
+        fill="${col.label}" font-family="Arial,sans-serif">${escapeXml(label)}</text>`;
+    }
+  } else if (type === 'surgeTank') {
+    shape = `<rect x="${x - hw}" y="${y - hh}" width="${hw * 2}" height="${hh * 2}" rx="3"
+      fill="${col.fill}" stroke="${col.stroke}" stroke-width="1.5"/>
+      <line x1="${x - hw + 2}" y1="${y - hh + 9}" x2="${x + hw - 2}" y2="${y - hh + 9}"
+        stroke="white" stroke-width="1.5" opacity="0.8"/>`;
+    if (showLabels) {
+      labelEl = `<text x="${x}" y="${y - hh - 7}" text-anchor="middle" font-size="10" font-weight="600"
+        fill="#444" font-family="Arial,sans-serif">${escapeXml(label)}</text>`;
+    }
+  } else {
+    // All circle types: small filled dot
+    shape = `<circle cx="${x}" cy="${y}" r="${R}" fill="${col.fill}" stroke="${col.stroke}" stroke-width="1.5"/>`;
+    if (showLabels) {
+      labelEl = `<text x="${x}" y="${y - R - 6}" text-anchor="middle" font-size="10" font-weight="600"
+        fill="#444" font-family="Arial,sans-serif">${escapeXml(label)}</text>`;
+    }
+  }
+
+  const tip = tooltip(x, y, hh, label, typeName);
+
+  return `<g class="ng" style="cursor:pointer">
+  ${shape}
+  ${labelEl}
+  ${tip}
+</g>`;
+}
+
+// ─── Main export ─────────────────────────────────────────────────────────────
 export function generateSystemDiagramSVG(
   nodes: WhamoNode[],
   edges: WhamoEdge[],
@@ -105,7 +110,7 @@ export function generateSystemDiagramSVG(
   type VN = { id: string; type: string; label: string };
   type VE = { from: string; to: string; label: string; isDummy: boolean };
 
-  // Build virtual graph: edge-based pump/checkValve/turbine → virtual nodes
+  // Build virtual graph: edge-based pump/checkValve/turbine → virtual inline nodes
   const vns: VN[] = nodes.map(n => ({
     id: n.id,
     type: n.type || 'node',
@@ -131,10 +136,12 @@ export function generateSystemDiagramSVG(
   });
 
   if (vns.length === 0) {
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="120"><text x="200" y="65" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#999">No elements to display</text></svg>';
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="120">'
+      + '<text x="200" y="65" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#aaa">No elements to display</text>'
+      + '</svg>';
   }
 
-  // BFS level assignment
+  // ── BFS level assignment (longest-path for DAGs) ──────────────────────────
   const adj: Record<string, string[]> = {};
   const inDeg: Record<string, number> = {};
   vns.forEach(n => { adj[n.id] = []; inDeg[n.id] = 0; });
@@ -143,23 +150,30 @@ export function generateSystemDiagramSVG(
     if (e.to in inDeg) inDeg[e.to] = (inDeg[e.to] || 0) + 1;
   });
 
+  // Detect sources (no incoming edges) – if none, use the first node
   const sources = vns.filter(n => !inDeg[n.id]).map(n => n.id);
   const lvl: Record<string, number> = {};
   (sources.length > 0 ? sources : [vns[0].id]).forEach(s => { lvl[s] = 0; });
-  const q = sources.length > 0 ? [...sources] : [vns[0].id];
 
-  while (q.length > 0) {
-    const u = q.shift()!;
+  // Iterative longest-path BFS: ensure each node's level is beyond all predecessors
+  const visited = new Set<string>();
+  const queue = sources.length > 0 ? [...sources] : [vns[0].id];
+  while (queue.length > 0) {
+    const u = queue.shift()!;
+    if (visited.has(u)) continue;
+    visited.add(u);
     for (const v of (adj[u] || [])) {
-      if (lvl[v] === undefined || lvl[v] <= lvl[u]) {
-        lvl[v] = lvl[u] + 1;
-        q.push(v);
+      const newLvl = (lvl[u] ?? 0) + 1;
+      if (lvl[v] === undefined || lvl[v] < newLvl) {
+        lvl[v] = newLvl;
+        queue.push(v);
       }
     }
   }
+  // Assign level 0 to any orphan nodes
   vns.forEach(n => { if (lvl[n.id] === undefined) lvl[n.id] = 0; });
 
-  // Group by level
+  // ── Group by level, assign positions ─────────────────────────────────────
   const byLv: Record<number, string[]> = {};
   vns.forEach(n => {
     const l = lvl[n.id];
@@ -170,17 +184,17 @@ export function generateSystemDiagramSVG(
   const nLevels = Math.max(...Object.keys(byLv).map(Number)) + 1;
   const maxPerLevel = Math.max(...Object.values(byLv).map(a => a.length));
 
-  // Extra vertical space for labels (15px text + some margin)
-  const labelExtra = 30;
-  const svgW = MG * 2 + (nLevels - 1) * SX + RRW + 60;
-  const svgH = Math.max(280, MG * 2 + (maxPerLevel - 1) * SY + STH + labelExtra + 40);
+  // Extra height for labels above circles (R + 14) and below rects (14)
+  const labelPad = 28;
+  const svgW = MG * 2 + (nLevels - 1) * SX + RRW + 80;
+  const svgH = Math.max(240, MG * 2 + (maxPerLevel - 1) * SY + STH + labelPad + 40);
 
   const pos: Record<string, { x: number; y: number }> = {};
   Object.entries(byLv).forEach(([lStr, ids]) => {
     const l = parseInt(lStr);
     const cx = MG + l * SX;
     const totalH = (ids.length - 1) * SY;
-    const startY = (svgH / 2) - (totalH / 2);
+    const startY = svgH / 2 - totalH / 2;
     ids.forEach((id, i) => {
       pos[id] = { x: cx, y: startY + i * SY };
     });
@@ -189,16 +203,23 @@ export function generateSystemDiagramSVG(
   const nm: Record<string, VN> = {};
   vns.forEach(n => { nm[n.id] = n; });
 
-  // SVG output
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="background:white">
+  // ── Render ───────────────────────────────────────────────────────────────
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}"
+  viewBox="0 0 ${svgW} ${svgH}" style="background:white;font-family:Arial,sans-serif">
 <defs>
-  <marker id="arr" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto">
-    <polygon points="0 0, 8 3.5, 0 7" fill="#000"/>
+  <marker id="arr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+    <polygon points="0 0, 9 3.5, 0 7" fill="#555"/>
   </marker>
+  <filter id="sh" x="-10%" y="-10%" width="120%" height="120%">
+    <feDropShadow dx="1" dy="1" stdDeviation="2" flood-color="#0003"/>
+  </filter>
 </defs>
+<style>
+  .ng:hover .tip { visibility: visible !important; }
+</style>
 `;
 
-  // Draw edges first (under nodes)
+  // ── Edges ─────────────────────────────────────────────────────────────────
   ves.forEach(ve => {
     const p1 = pos[ve.from];
     const p2 = pos[ve.to];
@@ -212,34 +233,40 @@ export function generateSystemDiagramSVG(
     const y2 = p2.y;
 
     const sty = ve.isDummy
-      ? 'stroke="#bbb" stroke-width="1.5" stroke-dasharray="6,4"'
-      : 'stroke="#000" stroke-width="1.5"';
+      ? 'stroke="#ccc" stroke-width="1.5" stroke-dasharray="5,4"'
+      : 'stroke="#555" stroke-width="1.5"';
     const mk = ve.isDummy ? '' : 'marker-end="url(#arr)"';
 
+    // Path: straight or elbow
     let d: string;
     if (Math.abs(y1 - y2) < 3) {
       d = `M${x1} ${y1} L${x2} ${y2}`;
     } else {
-      const mx = x1 + (x2 - x1) * 0.45;
+      const mx = x1 + (x2 - x1) * 0.5;
       d = `M${x1} ${y1} L${mx} ${y1} L${mx} ${y2} L${x2} ${y2}`;
     }
 
     svg += `<path d="${d}" ${sty} fill="none" ${mk}/>\n`;
 
+    // Conduit label pill — centered on first horizontal segment
     if (showLabels && ve.label) {
-      const lx = (x1 + Math.min(x1 + (x2 - x1) * 0.45, x2)) / 2;
-      const ly = Math.min(y1, y2);
+      const lx = Math.abs(y1 - y2) < 3
+        ? (x1 + x2) / 2
+        : (x1 + x1 + (x2 - x1) * 0.5) / 2;  // midpoint of first horiz segment
+      const ly = y1;
       const lw = ve.label.length * 7 + 14;
-      svg += `<rect x="${lx - lw / 2}" y="${ly - 20}" width="${lw}" height="16" rx="8" fill="white" stroke="#000" stroke-width="1"/>\n`;
-      svg += `<text x="${lx}" y="${ly - 8}" text-anchor="middle" font-size="10" font-weight="600" fill="#000" font-family="Arial,sans-serif">${escapeXml(ve.label)}</text>\n`;
+      svg += `<rect x="${lx - lw / 2}" y="${ly - 16}" width="${lw}" height="14" rx="7"
+  fill="white" stroke="#aaa" stroke-width="1"/>\n`;
+      svg += `<text x="${lx}" y="${ly - 6}" text-anchor="middle" font-size="9" font-weight="600"
+  fill="#555" font-family="Arial,sans-serif">${escapeXml(ve.label)}</text>\n`;
     }
   });
 
-  // Draw nodes on top
+  // ── Nodes (drawn last, on top of edges) ───────────────────────────────────
   vns.forEach(vn => {
     const p = pos[vn.id];
     if (!p) return;
-    svg += renderNode(vn.type, p.x, p.y, vn.label);
+    svg += renderNode(vn.type, p.x, p.y, vn.label, showLabels);
   });
 
   svg += '</svg>';
