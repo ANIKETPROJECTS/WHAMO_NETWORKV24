@@ -5,7 +5,7 @@ const R   = 9;                       // circle node radius
 const RRW = 42; const RRH = 26;      // reservoir / flowBoundary (w × h)
 const STW = 20; const STH = 32;      // surgeTank (w × h)
 const SX  = 190;                     // column pitch (px)
-const SY  = 110;                     // row pitch base per leaf-unit (px)
+const SY  = 155;                     // row pitch base per leaf-unit (px)
 const MG  = 85;                      // canvas margin
 
 // ─── Bright colours per type ──────────────────────────────────────────────────
@@ -236,16 +236,40 @@ export function generateSystemDiagramSVG(
     });
   });
 
+  // ── Group laterals by anchor, separate above/below using canvas Y ──────────
+  // Must be done BEFORE leafSpan so we can boost anchor spans accordingly.
+  const lateralsByAnchor: Record<string, { above: string[]; below: string[] }> = {};
+  lateralSet.forEach(id => {
+    const ancId = lateralAnchor[id];
+    if (!lateralsByAnchor[ancId]) lateralsByAnchor[ancId] = { above: [], below: [] };
+    const vn  = nm[id];
+    const an  = nm[ancId];
+    const idy = getCanvasY(id,    vn.srcType, vn.srcId, nodes, edges);
+    const acy = getCanvasY(ancId, an.srcType, an.srcId, nodes, edges);
+    if (idy < acy) lateralsByAnchor[ancId].above.push(id);
+    else            lateralsByAnchor[ancId].below.push(id);
+  });
+
   // ── Subtree-aware leaf-span for proportional vertical spacing ─────────────
+  // Nodes with stacked laterals claim extra span so their slot is tall enough
+  // to fit all laterals without overlapping neighbour branches.
+  const lateralBoost: Record<string, number> = {};
+  Object.entries(lateralsByAnchor).forEach(([ancId, { above, below }]) => {
+    const extra = Math.max(above.length, below.length);
+    if (extra > 1) lateralBoost[ancId] = extra - 1; // extra leaf-units needed
+  });
+
   const leafSpan: Record<string, number> = {};
   const computeLeafSpan = (id: string, visiting = new Set<string>()): number => {
     if (id in leafSpan) return leafSpan[id];
     if (visiting.has(id)) { leafSpan[id] = 1; return 1; }
     visiting.add(id);
     const children = (adj[id] || []).filter(c => !lateralSet.has(c));
-    const span = children.length === 0
+    let span = children.length === 0
       ? 1
       : children.reduce((s, c) => s + computeLeafSpan(c, visiting), 0);
+    // Boost span if this node hosts multiple stacked laterals
+    span = Math.max(span, span + (lateralBoost[id] ?? 0));
     leafSpan[id] = span;
     return span;
   };
@@ -254,34 +278,33 @@ export function generateSystemDiagramSVG(
   // ── Compute SVG dimensions ─────────────────────────────────────────────────
   const nLevels = Math.max(...Object.keys(byLv).map(Number)) + 1;
 
-  // Total span of level-0 column (the root column) determines full height
-  const rootIds    = byLv[0] || [];
-  const totalSpan  = rootIds.reduce((s, id) => s + Math.max(1, leafSpan[id] ?? 1), 0);
-  const totalH     = Math.max(totalSpan - 1, 0) * SY;
+  // Total span from all level-0 roots determines the full diagram height
+  const rootIds   = byLv[0] || [];
+  const totalSpan = rootIds.reduce((s, id) => s + Math.max(1, leafSpan[id] ?? 1), 0);
+  const totalH    = Math.max(totalSpan - 1, 0) * SY;
 
-  let maxAbove = 0;
-  lateralSet.forEach(id => {
-    const vn  = nm[id];
-    const an  = nm[lateralAnchor[id]];
-    const idy = getCanvasY(id, vn.srcType, vn.srcId, nodes, edges);
-    const acy = getCanvasY(an.id, an.srcType, an.srcId, nodes, edges);
-    const diff = acy - idy;
-    if (diff > 0) maxAbove = Math.max(maxAbove, diff);
+  // Find tallest above/below lateral stack per anchor for padding
+  let maxAboveStack = 0;
+  let maxBelowStack = 0;
+  Object.values(lateralsByAnchor).forEach(({ above, below }) => {
+    maxAboveStack = Math.max(maxAboveStack, above.length);
+    maxBelowStack = Math.max(maxBelowStack, below.length);
   });
+  const topPad    = maxAboveStack > 0 ? maxAboveStack * SY + 40 : 0;
+  const bottomPad = maxBelowStack > 0 ? maxBelowStack * SY + 40 : 0;
 
-  const topPad = lateralSet.size > 0 ? Math.min(maxAbove + 50, 140) : 0;
-  const svgW   = MG * 2 + (nLevels - 1) * SX + RRW + 80;
-  const svgH   = Math.max(260, topPad + MG * 2 + totalH + STH + 60);
+  const svgW = MG * 2 + (nLevels - 1) * SX + RRW + 80;
+  const svgH = Math.max(260, topPad + bottomPad + MG * 2 + totalH + STH + 60);
 
   // ── Assign 2-D positions (subtree-aware) ──────────────────────────────────
   const pos: Record<string, { x: number; y: number }> = {};
-  const mainCentreY = topPad + MG + (svgH - topPad - MG * 2) / 2;
+  const mainCentreY = topPad + MG + (svgH - topPad - bottomPad - MG * 2) / 2;
 
-  // Recursively place nodes: each node is centred within its leaf-span slot
+  // Each node is centred within its proportional leaf-span slot
   const placeColumn = (ids: string[], cx: number, startY: number) => {
     let curY = startY;
     ids.forEach(id => {
-      const sp = Math.max(1, leafSpan[id] ?? 1);
+      const sp    = Math.max(1, leafSpan[id] ?? 1);
       const slotH = (sp - 1) * SY;
       pos[id] = { x: cx, y: curY + slotH / 2 };
       curY += sp * SY;
@@ -289,33 +312,32 @@ export function generateSystemDiagramSVG(
   };
 
   Object.entries(byLv).forEach(([lStr, ids]) => {
-    const l      = parseInt(lStr);
-    const cx     = MG + l * SX;
+    const l       = parseInt(lStr);
+    const cx      = MG + l * SX;
     const colSpan = ids.reduce((s, id) => s + Math.max(1, leafSpan[id] ?? 1), 0);
     const colH    = Math.max(colSpan - 1, 0) * SY;
     const startY  = mainCentreY - colH / 2;
     placeColumn(ids, cx, startY);
   });
 
-  // ── Place lateral nodes relative to their anchor ───────────────────────────
-  // Determine above/below from canvas positions; preserve the visual intent.
+  // ── Place lateral nodes — stack multiples so none overlap ─────────────────
+  // For each anchor, above-laterals stack upward 1×SY, 2×SY, …
+  // and below-laterals stack downward 1×SY, 2×SY, …
   lateralSet.forEach(id => {
-    const vn      = nm[id];
-    const ancId   = lateralAnchor[id];
-    const an      = nm[ancId];
-    const ap      = pos[ancId];
+    const ancId = lateralAnchor[id];
+    const ap    = pos[ancId];
     if (!ap) return;
 
-    const idy  = getCanvasY(id,    vn.srcType, vn.srcId, nodes, edges);
-    const acy  = getCanvasY(ancId, an.srcType, an.srcId, nodes, edges);
-    const above = idy < acy; // on canvas the lateral sits above the anchor
+    const { above, below } = lateralsByAnchor[ancId] ?? { above: [], below: [] };
+    const aboveIdx = above.indexOf(id);
+    const belowIdx = below.indexOf(id);
 
-    // Scale canvas offset to diagram row pitch for natural spacing
-    const canvasDiff  = Math.abs(acy - idy);
-    const scaleFactor = SY / 120; // 120 px = typical canvas row gap
-    const diagOffset  = Math.max(SY * 0.9, Math.min(canvasDiff * scaleFactor, SY * 2));
-
-    pos[id] = { x: ap.x, y: ap.y + (above ? -diagOffset : diagOffset) };
+    if (aboveIdx >= 0) {
+      // Stack upward: first lateral 1×SY above anchor, second 2×SY, etc.
+      pos[id] = { x: ap.x, y: ap.y - (aboveIdx + 1) * SY };
+    } else {
+      pos[id] = { x: ap.x, y: ap.y + (belowIdx + 1) * SY };
+    }
   });
 
   // ── Detect parallel edges ──────────────────────────────────────────────────
