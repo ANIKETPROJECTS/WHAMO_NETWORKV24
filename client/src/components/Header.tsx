@@ -78,6 +78,7 @@ import gridIcon from "@assets/grid_1779526458342.png";
 import fullscreenIcon from "@assets/fullscreen_1779526488758.png";
 import eyeOpenIcon from "@assets/view_(2)_1779527800443.png";
 import eyeHiddenIcon from "@assets/hidden_1779529637135.png";
+import arrangeIcon from "@assets/arrange_icon_1779686978241.png";
 
 // ─── Title bar compact button ─────────────────────────────────────────────────
 function TitleBarBtn({
@@ -487,7 +488,7 @@ export function Header({
           <TitleBarBtn icon={<Undo2 className="w-[22px] h-[22px]" />} label="Undo" onClick={undo} disabled={history.past.length === 0} />
           <TitleBarBtn icon={<Redo2 className="w-[22px] h-[22px]" />} label="Redo" onClick={redo} disabled={history.future.length === 0} />
           <div className="w-px bg-slate-200 mx-1 h-6 flex-shrink-0" />
-          <TitleBarBtn icon={<Layout className="w-[22px] h-[22px]" />} label="Arrange" onClick={autoArrange} disabled={nodes.length === 0} data-testid="btn-auto-arrange" />
+          <TitleBarBtn imgSrc={arrangeIcon} label="Arrange" onClick={autoArrange} disabled={nodes.length === 0} data-testid="btn-auto-arrange" />
         </div>
 
         {/* CENTER: flex-1 grows to fill space and centers the project name */}
