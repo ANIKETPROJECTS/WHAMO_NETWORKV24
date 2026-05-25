@@ -446,10 +446,11 @@ export function generateSystemDiagramSVG(
     svg += `<path d="${d}" ${sty} fill="none" ${mk}/>\n`;
 
     if (ve.label) {
-      const lx = Math.abs(y1 - y2) < 3
-        ? (x1 + x2) / 2
-        : x1 + (x2 - x1) * 0.25;
-      const ly = y1;
+      // For straight edges: midpoint of the line.
+      // For bezier curves: midpoint of the cubic (t=0.5) lands at ((x1+x2)/2, (y1+y2)/2),
+      // which is unique per edge — fixes labels stacking at the source node's Y.
+      const lx = (x1 + x2) / 2;
+      const ly = Math.abs(y1 - y2) < 3 ? y1 : (y1 + y2) / 2;
       const lw = ve.label.length * 7 + 16;
       const lh = 14;
       svg += `<g class="cg" data-srcid="${esc(ve.srcEdgeId)}" data-srctype="edge" style="pointer-events:all;cursor:pointer">
